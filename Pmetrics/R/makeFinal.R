@@ -1,0 +1,130 @@
+#' Extracts final cycle information from NPAG or IT2B run.
+#'
+#' This function will parse the output of \code{\link{NPparse}} or \code{\link{ITparse}} to generate a
+#' list suitable for analysis and plotting of NPAG  or IT2B final cycle population values.
+#'
+#' @title Summarize NPAG or IT2B Final Cycle Population Values
+#' @param data A suitable data object of the \emph{NPAG} or \emph{IT2B} class (see \code{\link{NPparse}} or \code{\link{ITparse}}).
+#' @return The output of \code{makeFinal} is a list of class \emph{PMfinal}, which has 10 objects from NPAG,
+#' or 8 objects from IT2B:
+#' \item{popPoints }{(NPAG only) Dataframe of the final cycle joint population density of grid points
+#'  with column names equal to the name of each random parameter plus \emph{prob} for the
+#'  associated probability of that point}
+#' \item{popMean }{The final cycle mean for each random parameter distribution}
+#' \item{popSD }{The final cycle standard deviation for each random parameter distribution}
+#' \item{popCV }{The final cycle coefficient of variation (SD/Mean) for each random parameter distribution}
+#' \item{popVar }{The final cycle variance for each random parameter distribution}
+#' \item{popCov }{The final cycle random parameter covariance matrix}
+#' \item{popCor }{The final cycle random parameter correlation matrix}
+#' \item{popMedian }{The final cycle median values for each random parameter}
+#' \item{gridpts }{(NPAG only) Initial number of support points}
+#' \item{ab }{Matrix of boundaries for random parameter values}
+#' A plot method exists in \code{\link{plot}} for \emph{PMfinal} objects.
+#' @author Michael Neely
+#' @seealso \code{\link{NPparse}}, \code{\link{ITparse}},  \code{\link{plot.PMfinal}}
+#' @examples
+#' data(PMex1)
+#' final <- makeFinal(PMex1)
+#' final
+#' names(final)
+
+makeFinal <- function(data){
+           
+  if(!inherits(data,"NPAG") & !inherits(data,"IT2B")) stop(paste("Use PMparse() to generate an Pmetrics NPAG or IT2B object.\n")) 
+  if(inherits(data,"NPAG")){                                    
+    #set the number of grid points at the beginning
+    gridpts <- switch(data$indpts,2129,5003,10007,20011,40009,80021)
+    if (is.null(gridpts)){
+      gridpts <- (data$indpts-100)*80021
+    }
+    #summarize weighted corden
+    wParVol <- prod(data$ab[,2]-data$ab[,1]) / gridpts
+    if (nrow(data$corden)>1) {popMean <- colSums(data$corden[,1:data$nvar] * data$corden[,data$nvar+1] )  * wParVol} else {
+      popMean <- data$corden[1:data$nvar] * data$corden[data$nvar+1]  * wParVol
+    }
+    
+    if(nrow(data$corden)>1){
+      popCov <- matrix(NA,ncol=data$nvar,nrow=data$nvar)
+      for (i in 1:data$nvar){
+        for (k in 1:data$nvar){
+          popCov[i,k] <- sum(data$corden[,i] * data$corden[,k] * data$corden[,data$nvar+1])*wParVol - popMean[i]*popMean[k]
+        }  
+      }
+      if (any(popCov==0)) {popCor <- NA} else {popCor <- cov2cor(popCov)}
+    } else {
+      popCov <- matrix(rep(0,data$nvar**2),nrow=data$nvar)
+      popCor <- matrix(rep(NA,data$nvar**2),nrow=data$nvar)
+      diag(popCor) <- rep(1,data$nvar)
+    }
+  
+    popPoints <- data.frame(data$corden)
+    names(popPoints) <- c(data$par,"prob")
+    popPoints$prob <- popPoints$prob*wParVol
+    names(popMean) <- data$par
+    dimnames(popCov) <- list(data$par,data$par)
+    if (all(!is.na(popCor))) dimnames(popCor) <- list(data$par,data$par)
+  
+    if(data$icyctot>0) {
+      popMedian <- data$iaddl[6,,data$icyctot]
+    } else {
+      calcWtMed <- function(x,prob){
+        x <- cbind(x,prob)
+        if(nrow(x)==1){return(x[1])}
+        x <- x[order(x[,1]),]
+        xsum <- cumsum(x[,2])
+        xmedindex <- min(which(xsum>0.5))
+        xmed <- x[xmedindex,1]
+        xnint <- max(c(100,2*data$nsub))
+        xint <- diff(range(x[,1]))/xnint
+        xmed <- xmed - (xsum[xmedindex] - 0.5)/xnint*xint
+        return(xmed)        
+      }
+      popMedian <- apply(popPoints[,1:(ncol(popPoints)-1)],2,calcWtMed,popPoints$prob)
+    }
+    names(popMedian) <- data$par
+  
+    popVar <- diag(popCov)
+    names(popVar) <- data$par
+  
+    popSD <- sqrt(popVar)
+    names(popSD) <- data$par
+  
+    popCV <- abs(100*(popSD/popMean))
+    names(popCV) <- data$par
+  
+
+    outlist <- list(popPoints=popPoints,popMean=popMean,popSD=popSD,popCV=popCV,popVar=popVar,
+                popCov=popCov,popCor=popCor,popMedian=popMedian,gridpts=gridpts,ab=data$ab)
+    class(outlist)<-c("PMfinal","NPAG","list")
+    return(outlist)
+  }
+  if(inherits(data,"IT2B")){                                    
+    popMean <- data$imean[data$icyctot,]
+    names(popMean) <- data$par
+
+    popSD <- data$isd[data$icyctot,]
+    names(popSD) <- data$par
+
+    popVar <- popSD**2
+    names(popVar) <- data$par
+
+    popCV <- abs(data$icv[data$icyctot,])
+    names(popCV) <- data$par
+
+    popCov <- cov(data$lpar)
+    dimnames(popCov) <- list(data$par,data$par)
+
+    popCor <- cor(data$lpar)
+    dimnames(popCor) <- list(data$par,data$par)
+  
+    popMedian <- data$imed[data$icyctot,]
+    names(popMedian) <- data$par
+
+
+    outlist <- list(popMean=popMean,popSD=popSD,popCV=popCV,popVar=popVar,
+                popCov=popCov,popCor=popCor,popMedian=popMedian,ab=data$ab)
+    class(outlist)<-c("PMfinal","IT2B","list")
+    return(outlist)
+  }
+}
+
