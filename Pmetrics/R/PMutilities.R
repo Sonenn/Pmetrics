@@ -319,7 +319,7 @@ parseBlocks <- function(model){
 
 #check all blocks statements for more than maxwidth characters and insert line break if necessary
 chunks <- function(x,maxwidth=60){
-  for(i in 1:length(blocks)){
+  for(i in 1:length(x)){
     for(j in 1:length(x[[i]])){
       temp <- x[[i]][j]
       if(nchar(temp)>maxwidth){
@@ -354,7 +354,9 @@ makeModel <- function(model="model.txt",data="data.csv",engine,write=T,silent=F)
   }
   
   #check all blocks statements for more than maxwidth characters and insert line break if necessary
-  blocks <- chunks(blocks,maxwidth=60)
+  maxwidth <- 60
+  blocks <- chunks(x=blocks,maxwidth=maxwidth)
+
   
   #primary variable definitions
   npvar <- length(blocks$primVar)
@@ -398,8 +400,10 @@ makeModel <- function(model="model.txt",data="data.csv",engine,write=T,silent=F)
   #replace a,b with SIM limits argument if it is present
   if(engine$alg=="SIM" & !all(is.na(engine$limits))){  
     if(nrow(engine$limits)==nvar){ #make sure same row number
-      ab.df$a <- engine$limits[,1]
-      ab.df$b <- engine$limits[,2]
+      replA <- engine$limits[,1]
+      replB <- engine$limits[,2]
+      ab.df$a[!is.na(replA)] <- replA[!is.na(replA)]
+      ab.df$b[!is.na(replB)] <- replB[!is.na(replB)]
     } else {return(list(status=-1,msg="Your limit block does not have the same number of parameters as the model file.\n"))}
   } 
   

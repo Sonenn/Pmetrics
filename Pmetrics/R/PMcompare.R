@@ -53,9 +53,6 @@ PMcompare <- function (x,y,...,icen="median",outeq=1,plot=F){
   if(inherits(x,c("NPdata","ITdata"))) stop("You should specify your objects by run number.  See help.\n")
   
   #parse dots
-  if(length(grep("MTSKNN",installed.packages()[,1]))==0){
-    install.packages("MTSKNN",repos=getOption("repos"),dependencies=T)
-  }
   arglist <- list(...)
   namesPlot <- names(formals(plot.PMop))
   namesMTSKNN <- names(formals(mtsknn.eq))

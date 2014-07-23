@@ -3,12 +3,14 @@
 
 \subsection{NEW FEATURES}{
 \itemize{
+\item Added covariate argument to SIMrun to enable simulation with covariates
 \item Internal moving of parseBlocks function to independent function
 }
 }
 \subsection{BUG FIXES}{
 \itemize{
 \item Fixed small bug in makeNCA that caused an error in Tmax when there were two successive simulated Cmax that were the same by rounding.
+\item Corrected formulae for weighted prediction error to weight by SD not variance
 }
 }
 }

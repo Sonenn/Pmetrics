@@ -5,20 +5,33 @@
 #' sampling, or prior distributions may be manually specified.  Prior distributions may be
 #' unimodal-multivariate (parametric sampling), or multimodal-multivariate (semi-parametric sampling).
 #' For priors from NPAG, this can easily be accomplished with the \code{split} argument. 
-#' Noise can be applied to the observations. The first set of C0, C1, C2, and C3
-#' in the template data file that are not missing will be used.  If all are missing,
-#' the coefficients in the #error block of the model file will be used.  Noise may also be applied to
-#' the observation times, to the dose times, or to the dose amounts.  These latter three are 
-#' specified as arguments to the \code{SIMrun} function. Limits on the simulated parameter sets
-#' can also be specified using the limits on primary parameters in the model file or by specifying
-#' them manually as an argument.  It is permissible to fix a parameter for simulation that was a random
-#' parameter in the model prior by changing the range in the model file to a single value for that parameter.
+#' 
+#' It is also possible to simulate with covariates if they are included as part of the model.
+#' By specifying a covariate list argument, Pmetrics will first calculate the correlation matrix
+#' between the covariates and the Bayesian posterior parameter values for each subject in the population
+#' model.  Using either the mean and standard deviation of each covariate in the population, 
+#' or a user-specified mean and/or standard deviation, Pmetrics will then calculate an augmented 
+#' covariance matrix to be used in simulations.  Pmetrics will make a copy of the model file with all
+#' covariates moved into the primary block as parameters to be simulated.  
+#' 
+#' Noise can be applied to the simulated observations. Noise may also be applied to
+#' the observation times, to the dose times, or to the dose amounts.  
+#' 
+#' Limits on the simulated parameter sets can also be specified using the limits on primary parameters in 
+#' the model file or by specifying them manually as an argument. Limits can also be applied to simulated 
+#' covariates. 
+#' 
+#' It is permissible to fix a parameter for simulation that was a random parameter in the model prior by 
+#' changing the range in the model file to a single value for that parameter.
+#' 
 #' The same model and data file strutures are used for the simulator as for any other
 #' Pmetrics functions.  In this case, the data file will serve as the template for the information 
 #' regarding dosing, covariate values, and observations.  Template data files may have more than one
 #' subject in them, in which case the simulator will use each subject specified by the \code{include}
 #' argument (default is all subjects) to generate \code{nsim} parameter sets and corresponding
-#' observations.  Output is directed to text files, one for each template subject, which can be 
+#' observations.  
+#' 
+#' Simulator output is directed to text files, one for each template subject, which can be 
 #' read back into R by \code{link{SIMparse}}.  Output may also be directed to a new Pmetrics
 #' .csv data file using the \code{makecsv} argument.
 #' 
@@ -75,6 +88,7 @@
 #' To simulate outputs \emph{only} at the output times in the template data (i.e. EVID=0 events), use \code{predInt=0}, which is the default.
 #' Note that the maximum number of predictions total is 594, so the interval must be sufficiently large to accommodate this for a given
 #' number of output equations and total time to simulate over.  If \code{predInt} is set so that this cap is exceeded, predictions will be truncated.
+#' @param covariate A named list which allows for simulation with covariates.
 #' @param seed The seed for the random number generator.  For \code{nsub} > 1, should be a vector of length equal to \code{nsub}.
 #' Shorter vectors will be recycled as necessary.  Default is -17.
 #' @param ode Ordinary Differential Equation solver log tolerance or stiffness.  Default is -4, i.e. 0.0001.  Higher values will result in faster
@@ -155,10 +169,15 @@ SIMrun <- function(poppar,limits=NULL,model="model.txt",data="data.csv",split=F,
     }
   }
   
+  #number of random parameters
+  if(inherits(poppar,"PMfinal")){
+    npar <- nrow(poppar$popCov)
+  } else {npar <- nrow(poppar[[3]])}
+  
   #deal with limits on parameter simulated values
   if(all(is.null(limits))){ #limits are omitted altogether
-    limits <- NA
-    omitLimits <-T
+    parLimits <- matrix(rep(NA,2*npar),ncol=2)
+    omitParLimits <-T
   } else {
     if(!is.na(limits[1]) & is.vector(limits)){ #limits not NA and specified as vector of length 1 or 2
       #so first check to make sure poppar is a PMfinal object
@@ -166,9 +185,14 @@ SIMrun <- function(poppar,limits=NULL,model="model.txt",data="data.csv",split=F,
       orig.lim <- poppar$ab
       if(length(limits)==1) limits <- c(1,limits)
       final.lim <- t(apply(poppar$ab,1,function(x) x*limits))
-      limits <- final.lim
-    } else {limits <- limits} #limits specified as NA or a matrix
-    omitLimits <- F
+      parLimits <- final.lim
+    } else {
+      if(is.na(limits)){ #limits specified as NA (use limits in model file)
+        parLimits <- matrix(rep(NA,2*npar),ncol=2)
+      } else {parLimits <- limits}  #limits specified as a matrix
+      
+    }
+    omitParLimits <- F
   }
   
   #if covariate is not missing, augment prior with covariate and modify model file
@@ -198,8 +222,7 @@ SIMrun <- function(poppar,limits=NULL,model="model.txt",data="data.csv",split=F,
     #remove those that are missing
     corCVmiss <- which(is.na(corCV[,1]))
     corCV <- corCV[-corCVmiss,-corCVmiss]
-    nsimcov <- ncol(corCV) - length(poppar$popMean)
-    npar <- ncol(corCV) - nsimcov
+    nsimcov <- ncol(corCV) - npar
     #augment poppar correlation matrix
     corMat <- poppar$popCor
     corMat <- cbind(corMat,corCV[(nsimcov+1):(npar+nsimcov),(1:nsimcov)])
@@ -258,36 +281,45 @@ SIMrun <- function(poppar,limits=NULL,model="model.txt",data="data.csv",split=F,
     orig.covlim <- cbind(covMin[1:nsimcov],covMax[1:nsimcov])
     
     if(length(covariate$limits)==0){ #limits are omitted altogether
-      covLimits <- NA
+      covLimits <- orig.covlim #they will be ignored
       omitCovLimits <-T
-      final.covlim <- orig.covlim
     } else {
       if(!is.na(covariate$limits[1]) & is.vector(covariate$limits)){ #limits not NA and specified as vector of length 1 or 2
         
         if(length(covariate$limits)==1) covariate$limits <- c(1,covariate$limits)
-        final.covlim <- t(apply(orig.covlim,1,function(x) x*covariate$limits))
-        covLimits <- final.covlim
-      } else {covLimits <- covLimits} #limits specified as NA or a matrix
+        covLimits <- t(apply(orig.covlim,1,function(x) x*covariate$limits))
+      } else {
+        if(is.na(covariate$limits[1])){ #covLimits specified as NA (use limits of original population)
+          covLimits <- orig.covlim
+        } else {covLimits <- covLimits}  #covLimits specified as a matrix
+        
+      }
       omitCovLimits <- F
     }
     
+    #combine limits and covLimits
+    limits <- rbind(parLimits,covLimits)
+    dimnames(limits) <- NULL
     
     
     #now, modify model file by moving covariates up to primary
     #do it non-destructively, so new model is c_model and old model is preserved
-
+    
     blocks <- parseBlocks(model)
-    covPrim <- sapply(1:nsimcov,function(x) paste(dimnames(final.covlim)[[1]][x],paste(final.covlim[x,],collapse=","),sep=","))
+    covPrim <- sapply(1:nsimcov,function(x) paste(dimnames(orig.covlim)[[1]][x],paste(covLimits[x,],collapse=","),sep=","))
     blocks$primVar <- c(blocks$primVar,covPrim)
     blocks$covar <- ""
     blocks <- blocks[unlist(lapply(blocks, function(x) x[1]!=""))]
-
+    
     newmodel <- file(paste("c_",model,sep=""),open="wt")
-    invisible(lapply(1:length(blocks),function(x){
-      cat(paste("#",toupper(names(blocks)[x]),"\n",sep=""),file=newmodel,append=T)
-      cat(paste(blocks[[x]],collapse="\n"),file=newmodel,append=T)
-      cat("\n\n",file=newmodel,append=T)
-    })
+    invisible(
+      lapply(1:length(blocks),
+             function(x){
+               cat(paste("#",toupper(names(blocks)[x]),"\n",sep=""),file=newmodel,append=T)
+               cat(paste(blocks[[x]],collapse="\n"),file=newmodel,append=T)
+               cat("\n\n",file=newmodel,append=T)
+             }
+      )
     )
     close(newmodel)
     
@@ -296,9 +328,17 @@ SIMrun <- function(poppar,limits=NULL,model="model.txt",data="data.csv",split=F,
     #remake poppar
     poppar$popMean <- meanVector
     poppar$popCov <- covMat
-
+    #clean up covlimits if necessary
+    if(omitCovLimits){
+      covLimits <- matrix(rep(NA,2*nsimcov),ncol=2)
+      limits <- rbind(parLimits,covLimits)
+    }
     
-  } else {simWithCov <- F} #end if (covariate) block
+    
+  } else {
+    simWithCov <- F
+    limits <- parLimits
+  } #end if (covariate) block
   
   #get information from datafile
   dataoffset <- 2*as.numeric("addl" %in% names(data))
@@ -316,8 +356,7 @@ SIMrun <- function(poppar,limits=NULL,model="model.txt",data="data.csv",split=F,
     obsNoise <- rep(0,4*numeqt)
   }
   if(all(is.na(obsNoise))){ #obsNoise set to NA, so get coefficients from data file; if missing, set to 0
-    obsNoiseNotMiss <- lapply(1:numeqt,function(x) {
-      which(!is.na(data$c0) & data$outeq==x)[1]}) #get non-missing coefficients for each output
+    obsNoiseNotMiss <- lapply(1:numeqt,function(x) which(!is.na(data$c0) & data$outeq==x)[1]) #get non-missing coefficients for each output
     
     checkObsNoise <- function(x,outeq){
       if(is.na(x)) {
@@ -332,17 +371,15 @@ SIMrun <- function(poppar,limits=NULL,model="model.txt",data="data.csv",split=F,
   }
   
   #if simulating covariates, then reset ncov and covnames as they have been moved to primary block
-  if(simWithCov){
-    ncov <- 0
-    covnames <- NA
-  }
+  #   if(simWithCov){
+  #     ncov <- 0
+  #     covnames <- NA
+  #   }
   
   #attempt to translate model file into  fortran model file   
   modeltxt <- model
   engine <- list(alg="SIM",ncov=ncov,covnames=covnames,numeqt=numeqt,limits=limits,indpts=-99)
-  return(engine)
   trans <- makeModel(model=model,data=data,engine=engine,write=T,silent=silent)
-  return(model)
   if(trans$status==-1) {
     endNicely(trans$msg,modeltxt,data)
   } else {
@@ -352,36 +389,21 @@ SIMrun <- function(poppar,limits=NULL,model="model.txt",data="data.csv",split=F,
     valfix <- trans$valfix
     asserr <- trans$asserr
     
-    if(omitLimits) {  #no limits at all on PK parameters
-      limits <- data.frame(a=rep(NA,nvar),b=rep(NA,nvar)) #no limits
-    } else {
-      limits <- trans$ab #limits are from model file (which was overwritten if limits!=NA at start)
-    } 
-    
-    if(simWithCov){ #we are simulating with covariates
-      if(omitCovLimits) {  #no limits at all on simulated covariates
-        covlimits <- data.frame(a=rep(NA,nsimcov),b=rep(NA,nsimcov)) #no limits
-      } else {
-        limits <- trans$ab #limits are from model file (for both parameters and covariates)
-      }
+    #grab limits from model file if they were not set to null
+    if(!omitParLimits){
+      parLimits <- as.matrix(trans$ab[1:npar,])
+    }
+    if(simWithCov && !omitCovLimits) {
+      covLimits <- as.matrix(trans$ab[(1+npar):(nsimcov+npar),])
     }
     
-    #if not simulating with covariates limits is set
+    #final limits
+    if(simWithCov){
+      limits <- rbind(parLimits,covLimits)
+    } else {limits <- parLimits}
     
-    #if simulating with covariates there are 4 possibilities
-    # 1) no limits on parameters or covariates
-    if(omitLimits & simWithCov & omitCovLimits) limits <- rbind(limits,covlimits)
-    # 2) limits on parameters but not covariates
-    if(!omitLimits & simWithCov & omitCovLimits) limits <- rbind(limits,covlimits)
-    # 3) no limits on parameters, but limits on covariates
-    if(omitLimits & simWithCov & !omitCovLimits) limits <- limits
-    # 4) limits on both
-    if(!omitLimits & simWithCov & !omitCovLimits) limits <- limits
-    
-    
-    
+    #parameter and covariate types
     ptype <- ifelse(trans$ptype==1,"r","f")
-    #append covariates to be "r" if simulating with them
     ctype <- trans$ctype
   }
   if(identical(modeltxt,model)) {
@@ -519,7 +541,7 @@ SIMrun <- function(poppar,limits=NULL,model="model.txt",data="data.csv",split=F,
   
   #apply limits as necessary
   if(sum(ptype=="r")>ncol(pop.mean)) stop("You have specified variables to be random in your model file\nthat were not random in poppar.\n")
-  varDF <- data.frame(ptype=ptype,limit=ifelse(ptype=="r" & all(is.na(limits)),1,0))
+  varDF <- data.frame(ptype=ptype,limit=apply(limits,1,function(x) ifelse(all(is.na(x)),1,0)))
   varDF$limit[varDF$ptype=="f"] <- NA
   varDF$a[varDF$ptype=="r"] <- limits[,1]
   varDF$b[varDF$ptype=="r"] <- limits[,2]

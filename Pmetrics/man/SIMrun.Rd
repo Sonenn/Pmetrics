@@ -70,6 +70,8 @@ To simulate outputs \emph{only} at the output times in the template data (i.e. E
 Note that the maximum number of predictions total is 594, so the interval must be sufficiently large to accommodate this for a given
 number of output equations and total time to simulate over.  If \code{predInt} is set so that this cap is exceeded, predictions will be truncated.}
 
+\item{covariate}{A named list which allows for simulation with covariates.}
+
 \item{seed}{The seed for the random number generator.  For \code{nsub} > 1, should be a vector of length equal to \code{nsub}.
 Shorter vectors will be recycled as necessary.  Default is -17.}
 
@@ -115,20 +117,33 @@ sampling.  NPAG or IT2B final objects can easily be used as the prior distributi
 sampling, or prior distributions may be manually specified.  Prior distributions may be
 unimodal-multivariate (parametric sampling), or multimodal-multivariate (semi-parametric sampling).
 For priors from NPAG, this can easily be accomplished with the \code{split} argument.
-Noise can be applied to the observations. The first set of C0, C1, C2, and C3
-in the template data file that are not missing will be used.  If all are missing,
-the coefficients in the #error block of the model file will be used.  Noise may also be applied to
-the observation times, to the dose times, or to the dose amounts.  These latter three are
-specified as arguments to the \code{SIMrun} function. Limits on the simulated parameter sets
-can also be specified using the limits on primary parameters in the model file or by specifying
-them manually as an argument.  It is permissible to fix a parameter for simulation that was a random
-parameter in the model prior by changing the range in the model file to a single value for that parameter.
+
+It is also possible to simulate with covariates if they are included as part of the model.
+By specifying a covariate list argument, Pmetrics will first calculate the correlation matrix
+between the covariates and the Bayesian posterior parameter values for each subject in the population
+model.  Using either the mean and standard deviation of each covariate in the population,
+or a user-specified mean and/or standard deviation, Pmetrics will then calculate an augmented
+covariance matrix to be used in simulations.  Pmetrics will make a copy of the model file with all
+covariates moved into the primary block as parameters to be simulated.
+
+Noise can be applied to the simulated observations. Noise may also be applied to
+the observation times, to the dose times, or to the dose amounts.
+
+Limits on the simulated parameter sets can also be specified using the limits on primary parameters in
+the model file or by specifying them manually as an argument. Limits can also be applied to simulated
+covariates.
+
+It is permissible to fix a parameter for simulation that was a random parameter in the model prior by
+changing the range in the model file to a single value for that parameter.
+
 The same model and data file strutures are used for the simulator as for any other
 Pmetrics functions.  In this case, the data file will serve as the template for the information
 regarding dosing, covariate values, and observations.  Template data files may have more than one
 subject in them, in which case the simulator will use each subject specified by the \code{include}
 argument (default is all subjects) to generate \code{nsim} parameter sets and corresponding
-observations.  Output is directed to text files, one for each template subject, which can be
+observations.
+
+Simulator output is directed to text files, one for each template subject, which can be
 read back into R by \code{link{SIMparse}}.  Output may also be directed to a new Pmetrics
 .csv data file using the \code{makecsv} argument.
 }

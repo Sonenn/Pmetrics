@@ -80,8 +80,8 @@ makeOP <- function(data){
       obspred$obsSD <- c0+c1*obspred$obs+c2*obspred$obs**2+c3*obspred$obs**3
       obspred$d <- obspred$pred-obspred$obs
       obspred$ds <- (obspred$pred-obspred$obs)**2
-      obspred$wd <- (obspred$pred-obspred$obs)/(obspred$obsSD**2)
-      obspred$wds <- (obspred$pred-obspred$obs)**2/(obspred$obsSD**2)
+      obspred$wd <- (obspred$pred-obspred$obs)/obspred$obsSD
+      obspred$wds <- ((obspred$pred-obspred$obs)/obspred$obsSD)**2
       
     } 
     class(obspred)=c("PMop","data.frame")

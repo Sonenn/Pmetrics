@@ -48,19 +48,21 @@ summary.PMop <- function(x,digits=max(3,getOption("digits")-3),pred.type="post",
     #SD
     sumstat[7,] <- round(apply(data[,2:4],2,sd,na.rm=T),digits)
     sumstat <- data.frame(sumstat)
+    #N
+    N <- length(data$obs[!is.na(data$obs)])
     #mean prediction error
-    mpe <- mean(data$d,na.rm=T)
-    #wt = 1/sd^2, so mwpe = sum(wd)/sum(wt)
+    mpe <- sum(data$d,na.rm=T)/N
+    #wt = 1/sd, so mwpe = sum(wd)/sum(wt)
     #mean weighted prediction error or BIAS
-    mwpe <- sum(data$wd,na.rm=T)/sum(1/data$obsSD**2,na.rm=T)
+    mwpe <- sum(data$wd,na.rm=T)/N
     #mean squared prediction error
-    mspe <- mean(data$ds,na.rm=T)
+    mspe <- sum(data$ds,na.rm=T)/N
     #root mean squared error (RMSE)
     rmse <- sqrt(mspe)
     #%rmse
-    percent_rmse <- rmse * 100 * nrow(data) / sum(data$obs,na.rm=T)
+    percent_rmse <- rmse * 100 * N / sum(data$obs,na.rm=T)
     #mean weighted squared prediction error
-    mwspe <- sum(data$wds,na.rm=T)/sum(1/data$obsSD**2,na.rm=T)
+    mwspe <- sum(data$wds,na.rm=T)/N
     #bias-adjusted squared prediction error
     bamspe <- mspe - mpe**2
     #imprecision - bias-adjusted mean weighted squared error
