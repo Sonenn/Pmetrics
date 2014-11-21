@@ -15,9 +15,13 @@
 #' @author Michael Neely
 
 makePop <- function(run,NPdata) {
-  require(utils)
-  require(reshape2)
-  
+  #require(utils)
+  if(length(grep("reshape2",installed.packages()[,1]))==0){
+    install.packages("reshape2",repos="http://cran.cnr.Berkeley.edu",dependencies=T)
+  }
+  reshape2.installed <- require(reshape2)
+  if(!reshape2.installed) stop("Error: connect to internet and re-run makePop to download and install reshape2 package.\n")
+    
   #get data
   if (!missing(run)){ #run specified, so load corresponding objects
     PMload(run)
@@ -48,6 +52,18 @@ makePop <- function(run,NPdata) {
   
   #suppress mode for NPAG
   pop <- pop[pop$icen!="mode",]
+  
+  #add predictions at observed times
+  op <- makeOP(NPdata)
+  opPop <- op[op$pred.type=="pop",]
+  pop <- rbind(pop,opPop[,c("id","time","icen","pred","outeq","block")])
+  
+  #remove duplicates
+  dupTime <- which(duplicated(pop[,c("id","time","icen","outeq","block")]))
+  if(length(dupTime)>0) pop <- pop[-dupTime,]
+  
+  #sort by icen, id, time, outeq
+  pop <- pop[order(pop$icen,pop$id,pop$time,pop$outeq),]
   
   class(pop) <- c("PMpop","data.frame")
  

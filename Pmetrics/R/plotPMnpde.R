@@ -72,6 +72,5 @@ plot.PMnpde <- function(x,outeq=1,...){
   if(length(data)==0) stop(paste("NPDE for output ",outeq," was not calculated when makeNPDE was run.\n",sep=""))
 
   plot(data,...)  
-  par(mfrow=c(1,1))
   
 }

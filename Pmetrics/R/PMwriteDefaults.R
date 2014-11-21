@@ -18,7 +18,7 @@ PMwriteDefaults <- function(){
       names(PMopt)[i] <- paste(getDefaults()[i],"Default",sep=".")
     }
   }else { PMopt <- NULL}
-  optFile <- paste(Sys.getenv("PmetricsPath"),"/Pmetrics/config/PMopt.Rdata",sep="")
+  optFile <- paste(get("PmetricsPath",envir=PMenv),"/Pmetrics/config/PMopt.Rdata",sep="")
   save(PMopt,file=optFile)
   
 }

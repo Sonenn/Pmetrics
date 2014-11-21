@@ -6,9 +6,11 @@
 #' @title Calculation of PTAs
 #' @param simdata A vector of simulator output filenames, e.g. c(\dQuote{simout1.txt},\dQuote{simout2.txt}),
 #' with wildcard support, e.g. \dQuote{simout*} or \dQuote{simout?}, or
-#' a list of PMsim objects made by \code{\link{SIMparse}} with suitable simulated doses and observations.  The number and times of simulated
+#' a list of PMsim objects made by \code{\link{SIMparse}} with suitable simulated regimens and observations.  The number and times of simulated
 #' observations does not have to be the same in all objects.
-#' @param targets A vector of pharmacodynamic targets, such as Minimum Inhibitory Concentrations (MICs), e.g. c(0.25, 0.5,1,2,4,8,16,32)
+#' @param simlabels Optional character vector of labels for each simulation.  Default is \code{c(\dQuote{Regimen 1}, \dQuote{Regimen 2},...)}.
+#' @param targets A vector of pharmacodynamic targets, such as Minimum Inhibitory Concentrations (MICs), e.g. c(0.25, 0.5,1,2,4,8,16,32).
+#' This can also be a sampled distribution using  \code{\link{makePTAtarget}}.
 #' @param target.type A numeric or character vector, length 1.  If numeric, must correspond to an observation time common to all PMsim objects in
 #' \code{simdata}, rounded to the nearest hour.  In this case, the target statistic will be the ratio of observation at time \code{target.type} to target.  This enables 
 #' testing of a specific timed concentration (e.g. one hour after a dose or C1) which may be called a peak, but is not actually the maximum drug
@@ -28,18 +30,30 @@
 #' Ideally then, the simulated datset should contain sufficient observations within the interval specified by \code{start} and \code{end}.
 #' @return The output of \code{makePTA} is a list of class \emph{PMpta},
 #' which has 2 objects:
-#' \item{results }{A data frame with the following columns: simnum,id,target,ratio.  
+#' \item{results }{A data frame with the following columns: simnum, id, target, pdi.  
 #' \emph{simnum} is the number of the simulation; \emph{id} is the simulated profile number
-#' within each simulation; \emph{target} is the specified target; and \emph{ratio} is
-#' the target ratio, e.g. time > target, auc:target, etc.}
-#' \item{outcome }{A data frame summarizing the results with the following columns: simnum, target, success, meanratio, and sdratio.
-#' \emph{simnum} and \emph{target} are as for \code{outcome}.  The \emph{prop.success} column has the proportion with a ratio > \code{success},
-#' as specified in the function call.  The \emph{mean.stat} and \emph{sd.stat} columns have the 
-#' mean and standard deviation of the target statistic (e.g. proportion end-start above target, ratio of Cmax to target) for each simulation and target.}  
+#' within each simulation; \emph{target} is the specified target; and \emph{pdi} is
+#' the target pharmacodynamic index, e.g. time > target, auc:target, etc.}
+#' \item{outcome }{A data frame summarizing the results with the following columns: simnum, target, prop.success, pdi.mean, and pdi.sd.
+#' If \code{targets} was specified via \code{\link{makePTAtarget}} to be a sampled distribution, then
+#' the target column will be missing from the outcome table.
+#' \emph{simnum} and \emph{target} are as for \code{results}.  The \emph{prop.success} column has the proportion with a pdi > \code{success},
+#' as specified in the function call.  The \emph{pdi.mean} and \emph{pdi.sd} columns have the 
+#' mean and standard deviation of the target pharmacodynamic index (e.g. proportion end-start above target, ratio of Cmax to target) for each simulation and target.}  
 #' @author Michael Neely
 #' @seealso \code{\link{plot.PMpta}}, \code{\link{SIMparse}}
 
-makePTA <- function(simdata,targets,target.type,success,outeq=1,free.fraction=1,start,end){
+makePTA <- function(simdata,simlabels,targets,
+                    target.type,success,outeq=1,
+                    free.fraction=1,start,end){
+
+  if(length(grep("reshape2",installed.packages()[,1]))==0){
+    install.packages("reshape2",repos="http://cran.cnr.Berkeley.edu",dependencies=T)
+  }
+  reshape2.installed <- require(reshape2,warn.conflicts=F,quietly=T)
+  if(!reshape2.installed) stop("Error: connect to internet and re-run makePTA to download and install reshape2 package.\n")
+  
+  
   if(missing(simdata) | missing(target.type)) stop("Simulation output and target.type must be specified.\n")
   if(is.character(target.type) & !target.type %in% c("time","auc","peak","min")) stop("Please specify target.type as a numerical value corresponding to a common\ntime in all simulated datasets, or a character value of 'time', 'auc', 'peak' or 'min'.\n")
   if(!inherits(simdata,"list")){ #so we are dealing with names of files
@@ -55,17 +69,30 @@ makePTA <- function(simdata,targets,target.type,success,outeq=1,free.fraction=1,
   if(!inherits(simdata[[1]],"PMsim")) {simdata <- list(simdata);class(simdata) <- c("PMsim","list")}
   #number of sims
   nsim <- length(simdata)
+  #make sim labels
+  sim.labels <- paste("Regimen",1:nsim)
+  if(!missing(simlabels)){
+    nsimlabels <- length(simlabels)
+    if(nsimlabels<nsim) cat("Warning: there are more simulations than labels.\n")
+    sim.labels[1:min(nsimlabels,nsim)] <- simlabels[1:min(nsimlabels,nsim)]
+  }
   #replicate start and end times if supplied for each simulation
   if(!missing(start)) {start <- rep(start,nsim)}
   if(!missing(end)) {end <- rep(end,nsim)}
   #number of targets
-  ntarg <- length(targets)
+  if(missing(targets)) stop("You must supply at least one target.\n")
+  if(inherits(targets,"PMpta.targ")) {
+    simTarg <- T #targets are a distribution, set ntarg later
+  } else {
+    simTarg <- F #targets are discrete vector
+    ntarg <- length(targets)
+  }
   #the list to hold the PTA results
   results <- list()
   
   cat("\nCalculating PTA for each simulation and target...\n")
   flush.console()
-  if(target.type=="time"){
+  if(!simTarg & target.type=="time"){
     maxpb <- nsim*ntarg
   } else {maxpb <- nsim}
   pb <- txtProgressBar(min = 0, max = maxpb, style = 3)
@@ -98,6 +125,15 @@ makePTA <- function(simdata,targets,target.type,success,outeq=1,free.fraction=1,
     #number of observations
     wrk.nobs <- length(wrk.times)
     if(wrk.nobs<5) warning(paste("Only ",wrk.nobs," simulated observations available for simulation ",simnum,".\nThis can compromise estimates of target attainment.\nStrongly consider increasing the number of simulated observations.\n",sep=""))
+    #number of simulated profiles
+    wrk.nprofile <- length(unique(wrk.sim$id))
+    
+    #simulate targets if needed
+    if(simTarg){
+      set.seed(-17) #ensure same sequence
+      randTarg <- sample(x=targets$target,size=wrk.nprofile,replace=T,prob=targets$n)
+      ntarg <- length(randTarg)
+    }
     
     #time above target
     if(target.type=="time"){
@@ -133,73 +169,115 @@ makePTA <- function(simdata,targets,target.type,success,outeq=1,free.fraction=1,
       cumTime <- function(sim,targ){
         pairs <- pairUp(sim)
         npairs <- length(pairs[[1]])
-        interval <- sum(unlist(lapply(1:npairs,function(x) timeabove(times=pairs[[1]][[x]],outs=pairs[[2]][[x]],targ=targ))))
+        interval <- sum(unlist(lapply(1:npairs,function(x) timeabove(times=pairs[[1]][[x]],outs=pairs[[2]][[x]],targ=targ[x]))))
         #divide total time in the interval by the end-start interval
         return(interval/(wrk.end-wrk.start))
       }
       
-      #get the results, which is initially a list [[ntarg]][nsim]
+      #get the result, which is initially a list [[ntarg]][nsim]
       pta <- list()
-      for(t in 1:ntarg){
-        targ <- targets[t]
-        pta[[t]] <- by(wrk.sim,wrk.sim$id,function(x) cumTime(x,targ=targ))
-        setTxtProgressBar(pb, (simnum-1)*ntarg + t)    
-        
+      if(!simTarg){ #set targets
+        for(t in 1:ntarg){
+          targ <- targets[t]
+          pta[[t]] <- by(wrk.sim,wrk.sim$id,function(x) cumTime(x,targ=rep(targ,wrk.nprofile)))
+          setTxtProgressBar(pb, (simnum-1)*ntarg + t)     
+        }
+      } else { #simulated targets
+        pta[[1]] <- by(wrk.sim,wrk.sim$id,function(x) cumTime(x,targ=randTarg))    
       }
       #get results into a format consistent with the others, i.e. matrix [ntarg,nsim]
       results[[simnum]] <- do.call(rbind,pta)
       if(ntarg==1) results[[simnum]] <- matrix(results[[simnum]],nrow=1)
+      
+      
+      
     }
     #auc above target
     if(target.type=="auc"){      
-      auc <- by(wrk.sim,wrk.sim$id,function(x) makeAUC(x,out~time)[,2])
-      results[[simnum]] <- sapply(auc,function(x) x/targets) #matrix [ntarg,nsim]
+      auc <- by(wrk.sim,wrk.sim$id,function(x) makeAUC(x,out~time,start=wrk.start,end=wrk.end)[,2])
+      if(simTarg){
+        results[[simnum]] <- matrix(c(randTarg,auc/randTarg),ncol=2)
+      } else {
+        results[[simnum]] <- sapply(auc,function(x) x/targets) #matrix [ntarg,nsim]
+      }
       if(ntarg==1) results[[simnum]] <- matrix(results[[simnum]],nrow=1)
       setTxtProgressBar(pb, simnum)    
     }
     #peak above target
     if(target.type=="peak"){      
       peak <- tapply(wrk.sim$out,wrk.sim$id,max)
-      results[[simnum]] <- sapply(peak,function(x) x/targets) #matrix [ntarg,nsim]
+      if(simTarg){
+        results[[simnum]] <- matrix(c(randTarg,peak/randTarg),ncol=2)
+      } else {
+        results[[simnum]] <- sapply(peak,function(x) x/targets) #matrix [ntarg,nsim]
+      }
       if(ntarg==1) results[[simnum]] <- matrix(results[[simnum]],nrow=1)
       setTxtProgressBar(pb, simnum)    
     }
     #min above target
     if(target.type=="min"){      
       minobs <- tapply(wrk.sim$out,wrk.sim$id,min)
-      results[[simnum]] <- sapply(minobs,function(x) x/targets) #matrix [ntarg,nsim]
+      if(simTarg){
+        results[[simnum]] <- matrix(c(randTarg,minobs/randTarg),ncol=2)
+      } else {
+        results[[simnum]] <- sapply(minobs,function(x) x/targets) #matrix [ntarg,nsim]
+      }      
       if(ntarg==1) results[[simnum]] <- matrix(results[[simnum]],nrow=1)
       setTxtProgressBar(pb, simnum)    
     }
     #specific obs above target
     if(is.numeric(target.type)){  #specific timed sample    
       timed <- by(wrk.sim,wrk.sim$id,function(x) x$out[round(x$time,2)==target.type])
-      results[[simnum]] <- sapply(timed,function(x) x/targets) #matrix [ntarg,nsim]
+      if(simTarg){
+        results[[simnum]] <- matrix(c(randTarg,timed/randTarg),ncol=2)
+      } else {
+        results[[simnum]] <- sapply(timed,function(x) x/targets) #matrix [ntarg,nsim]
+      }
       if(ntarg==1) results[[simnum]] <- matrix(results[[simnum]],nrow=1)
       setTxtProgressBar(pb, simnum)    
     }
     
   } #close simnum for loop  
   close(pb)
-  require(reshape2,warn.conflicts=F,quietly=T)
+
   resultDF <- melt(results)
-  names(resultDF) <- c("target","id","ratio","simnum")
-  resultDF$target <- targets[resultDF$target]
-  resultDF <- resultDF[,c("simnum","id","target","ratio")]
+  names(resultDF) <- c("target","id","pdi","simnum")
+  if(!simTarg){ #set targets
+    resultDF$target <- targets[resultDF$target]
+  }else{ #random targets
+    resultDF$target <- rep(randTarg,nsim)
+  }
+  resultDF <- resultDF[,c("simnum","id","target","pdi")]
   
-  succSimXtarg <- tapply(resultDF$ratio,list(resultDF$target,resultDF$simnum),
-                         function(x) sum(x>=success)/sum(!is.na(x)))
   
-  meanratio <- tapply(resultDF$ratio,list(resultDF$target,resultDF$simnum),mean,na.rm=T)
-  sdratio <- tapply(resultDF$ratio,list(resultDF$target,resultDF$simnum),sd,na.rm=T)
   
-  pta.outcome <- data.frame(simnum=rep(1:nsim,each=ntarg),
-                            target=rep(targets,nsim),
-                            prop.success=c(succSimXtarg),
-                            mean.stat=c(meanratio),
-                            sd.stat=c(sdratio))
+  
+  if(!simTarg){ #set targets
+    succSimXtarg <- tapply(resultDF$pdi,list(resultDF$target,resultDF$simnum),
+                           function(x) sum(x>=success)/sum(!is.na(x)))
+    meanpdi <- tapply(resultDF$pdi,list(resultDF$target,resultDF$simnum),mean,na.rm=T)
+    sdpdi <- tapply(resultDF$pdi,list(resultDF$target,resultDF$simnum),sd,na.rm=T)
+    
+    pta.outcome <- data.frame(simnum=rep(1:nsim,each=ntarg),
+                              target=rep(targets,nsim),
+                              prop.success=c(succSimXtarg),
+                              pdi.mean=c(meanpdi),
+                              pdi.sd=c(sdpdi))
+  } else { #random targets
+    succSim <- tapply(resultDF$pdi,resultDF$simnum,
+                      function(x) sum(x>=success)/sum(!is.na(x)))
+    meanpdi <- tapply(resultDF$pdi,resultDF$simnum,mean,na.rm=T)
+    sdpdi <- tapply(resultDF$pdi,resultDF$simnum,sd,na.rm=T)
+    pta.outcome <- data.frame(simnum=1:nsim,
+                              prop.success=c(succSim),
+                              pdi.mean=c(meanpdi),
+                              pdi.sd=c(sdpdi))
+  }
+  
 
   rval <- list(results=resultDF,outcome=pta.outcome)
+  attr(rval,"simlabels") <- sim.labels
+  attr(rval,"simTarg") <- simTarg
   class(rval) <- c("PMpta","list")
   return(rval)
 }

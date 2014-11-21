@@ -86,7 +86,7 @@
 
 
 NPparse <- function(outfile="NP_RF0001.TXT"){
-  require(utils)
+  #require(utils)
   cat("\n\n\nParsing NPAG results...\n\n")
   flush.console()
   

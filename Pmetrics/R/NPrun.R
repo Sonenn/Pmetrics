@@ -38,7 +38,7 @@
 #' @param aucint Interval for AUC calculations.  Default is 24 hours if the number of intervals is not greater than 48; otherwise it defaults
 #' to the interval which allows for <= 48 intervals.
 #' @param idelta Interval in minutes for predictions at times other than observations.  Default is 12.
-#' @param prior Name of a suitable NPAG output object from a prior run loaded with \code{\link{NPload}},
+#' @param prior Name of a suitable NPAG output object from a prior run loaded with \code{\link{PMload}},
 #' i.e. the \emph{NPdata} object.  A \code{prior} may be specified if the user wishes to
 #' start from a non-uniform prior distribution for the NPAG run. The default value is -99,
 #' which translates in NPAG to a uniform prior distribution.  An alternative is to include a DEN0001 file from the prior

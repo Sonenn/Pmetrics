@@ -24,7 +24,7 @@
 #'  \item{converge }{Boolean value if convergence occurred.}
 #'  \item{ODEtol }{Ordindary Differential Equation solver tolerance.}
 #'  \item{numeqt }{Number of output equations}
-#'  \item{gamest }{Vector of length equal to \code{numeqt} whose values are 0 if gamma was estimated for that
+#'  \item{ERRmod }{Vector of length equal to \code{numeqt} whose values are 0 if gamma was estimated for that
 #'   output equation or 1 if gamma was fixed to 1 for that output equation}
 #'  \item{ndrug }{Number of drug inputs}
 #'  \item{salt }{Vector of values of the salt fraction for each \code{ndrug}}
@@ -66,7 +66,7 @@
 #' @author Michael Neely
 
 ITparse <- function(outfile="IT_RF0001.TXT"){
-  require(utils)
+  #require(utils)
   cat("\n\n\nParsing IT2B results...\n\n")
   flush.console()
   
@@ -125,7 +125,7 @@ ITparse <- function(outfile="IT_RF0001.TXT"){
     #number of output equations
     numeqt <- ITdims[9]
     #gammma estimated (0) or fixed (1) for each output equation
-    gamest <- scan(outfile,quiet=T,skip=12,n=3,comment.char="#")
+    ERRmod <- scan(outfile,quiet=T,skip=12,n=1,comment.char="#")
     #number of drugs
     ndrug <- scan(outfile,quiet=T,skip=12+numeqt,n=1,comment.char="#")
     #salt fraction for each drug
@@ -238,8 +238,8 @@ ITparse <- function(outfile="IT_RF0001.TXT"){
     
     #calculate cycle aic and bic
     if(all(diff(as.numeric(igamlam))==0)){q <- 0} else {q <- 1}
-    aic <- -ilog + (nvar^2 + 3*nvar)/2 + q
-    bic <- -ilog + 0.5*((nvar^2 + 3*nvar)/2 + q) * log(sum(nobs))
+    aic <- -2*ilog + (nvar^2 + 3*nvar)/2 + q
+    bic <- -2*ilog + 0.5*((nvar^2 + 3*nvar)/2 + q) * log(sum(nobs))
     iic <- data.frame(cbind(aic,bic))
     names(iic) <- c("AIC","BIC")
     
@@ -306,7 +306,7 @@ ITparse <- function(outfile="IT_RF0001.TXT"){
                     sdata=sdata,dosecov=dosecov,outputs=outputs,negflag=negflag)
   } else {
     outlist <- list(nsub=nsub,nvar=nvar,nofix=nofix,par=par,parfix=parfix,covnames=covnames,ab=ab,fixedpos=fixedpos,valfix=valfix,
-                    icycmax=icycmax,icyctot=icyctot,stoptol=stoptol,converge=converge,ODEtol=ODEtol,numeqt=numeqt,gamest=gamest,
+                    icycmax=icycmax,icyctot=icyctot,stoptol=stoptol,converge=converge,ODEtol=ODEtol,numeqt=numeqt,ERRmod=ERRmod,
                     ndrug=ndrug,salt=salt,ndose=ndose,ncov=ncov,nobs=nobs,nobsmax=nobsmax,ypredpop=ypredpop,
                     ypredbay=ypredbay,parbay=parbay,ilog=ilog,iic=iic,
                     imean=imean,imed=imed,isd=isd,icv=icv,igamlam=igamlam,lpar=lpar,lsd=lsd,lcv=lcv,

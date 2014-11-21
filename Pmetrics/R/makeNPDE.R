@@ -32,8 +32,11 @@
 
 makeNPDE <- function(run,outeq,nsim=1000,...){
   
-  require(npde,quietly=T,warn.conflicts=F)
-  require(Pmetrics)
+  if(length(grep("npde",installed.packages()[,1]))==0){
+    install.packages("npde",repos="http://cran.cnr.Berkeley.edu",dependencies=T)
+  }
+  npde.installed <- require(npde,quietly=T,warn.conflicts=F)
+  if(!npde.installed) stop("Package npde not installed.\n")
   
   getName <- function(x){
     return(get(paste(x,run,sep=".")))
@@ -46,23 +49,29 @@ makeNPDE <- function(run,outeq,nsim=1000,...){
     
     #get model and data files
     instrfile <- suppressWarnings(tryCatch(readLines(paste(run,"etc/instr.inx",sep="/")),error=function(e) NULL))
-    
-    if(length(instrfile)>0){  #ok we got one
-      #model.for file name
-      modelfile <- instrfile[5]
-      #convert to original name    
-      modelfile <- Sys.glob(paste(run,"/inputs/",strsplit(modelfile,"\\.")[[1]][1],"*",sep=""))
-      #copy this file to new /npde folder
-      if(length(modelfile)>0){
-        file.copy(from=modelfile,to=paste(run,"/npde",sep=""))
-        modelfile <- basename(modelfile)
+    if(length(grep("IVERIFY",instrfile))==0){ #not updated instruction file
+      modelfile <- readline("Run used old instruction file. Enter model name. ")
+    } else { #ok we are using updated instruction file
+      if(length(instrfile)>0){  #ok we got one
+        #model.for file name
+        modelfile <- instrfile[5]
+        #convert to original name    
+        modelfile <- basename(Sys.glob(paste(run,"/inputs/",strsplit(modelfile,"\\.")[[1]][1],"*",sep="")))
         
-      }
-      datafileLine <- grep(" BLOCKPAT",instrfile)
-      datafileName <- instrfile[datafileLine+1]
+      } else {stop("Model file not found.\n")}
+    }
+    
+    #copy this modelfile to new /npde folder
+    invisible(file.copy(from=paste(run,"/inputs/",modelfile,sep=""),to=paste(run,"/npde",sep="")))
+    
+    
+    #now get the data file  
+    RFfile <- suppressWarnings(tryCatch(readLines(Sys.glob(paste(run,"outputs/??_RF0001.TXT",sep="/"))),error=function(e) NULL))
+    if(length(RFfile)>0){
+      datafileName <- tail(RFfile,1)
       file.copy(from=paste(run,"inputs",datafileName,sep="/"),to=paste(run,"/npde",sep=""))
       datafile <- datafileName
-    } else {stop("instr.inx file not found\n")}
+    } else {stop("Data file not found\n")}
   } else {stop("Please supply a run number.\n")}
   
   #parse dots
@@ -162,11 +171,11 @@ makeNPDE <- function(run,outeq,nsim=1000,...){
                   npde=npdeRes,
                   sim=simdata)
   save(NPAGout,file="../outputs/NPAGout.Rdata")
-
+  
   setwd(currwd)
   #put sim in global environment
   assign(paste("sim",as.character(run),sep="."),simdata,pos=1)
   
-
+  
   return(npdeRes)  
 }

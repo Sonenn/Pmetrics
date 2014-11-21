@@ -24,7 +24,7 @@
 #' using the final model population parameters.  To plot the results of subject 3 from run 2, for example, use the form
 #' \code{plot(sim.2[[3]])}}.
 #' @author Michael Neely
-#' @seealso \code{\link{NPreport}}, \code{\link{ITreport}}, \code{\link{NPparse}}, \code{\link{ITparse}}, 
+#' @seealso \code{\link{PMreport}}, \code{\link{NPparse}}, \code{\link{ITparse}}, 
 #' \code{\link{makeFinal}}, \code{\link{makeCycle}}, \code{\link{makeOP}}, \code{\link{makeCov}}, 
 #' \code{\link{makePop}}, \code{\link{makePost}}
 
@@ -55,8 +55,12 @@ PMload <- function(run=1,...){
         for (i in 1:length(newNames)){
           assign(newNames[i],IT2Bout[[i]],pos=parent.frame())
         }
-      } else {cat(paste(filename," not found in ",getwd(),"/",thisrun,"/outputs or ",getwd(),".\n",sep=""))}
+      } else {
+        cat(paste(filename," not found in ",getwd(),"/",thisrun,"/outputs or ",getwd(),".\n",sep=""))
+        return(invisible(F)) #error, abort
+      }
     }  
   } #end thisrun loop
+  return(invisible(T)) #no errors
 }
 

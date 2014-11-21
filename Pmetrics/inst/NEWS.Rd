@@ -1,4 +1,84 @@
 \name{NEWS}
+\section{Changes in version 1.3.0}{
+
+\subsection{NEW FEATURES}{
+\itemize{
+\item Added summary.PMfinal to provide non-parametric parameter summaries based on simulation or parametric parameter summaries based on central limit theorem
+\item Added col.pred argument to plot.PMmatrix to allow separate coloring of predicted profiles
+\item Added makePTAtarget to simulate distributions of targets and updated makePTA, plot.PMpta, and summary.PMpta accordingly.
+\item Added the ability to do PDI (pharmacodynamic index) plots with plot.PMpta.
+\item NPAG, IT2B and simulator updated logic for SS dosing to have observation at time x be the concentration x hours after the beginning of the last steady state dose
+\item Added another argument to the covariate SIMrun list argument: fix, which permits some covariates to be fixed to values in the template and not simulated
+\item Re-parameterized limits argument to the covariate SIMrun list argument so that it is a named list with the desired limits for each covariate
+}
+}
+\subsection{BUG FIXES}{
+\itemize{
+\item Fixed bug in model file syntax checking with compilers other than gfortran.
+\item summary.PMcov now handles non-numeric IDs correctly.
+\item makePTA now calculates AUC correctly when start!=0 - it was adding in a time=0, conc=0 row, regardless of whether start=0 or not
+}
+}
+}
+
+
+\section{Changes in version 1.2.9}{
+
+\subsection{NEW FEATURES}{
+\itemize{
+\item Added time after dose plotting option to plot.PMmatrix.
+\item Added summary.PMmatrix and print.summary.PMmatrix
+\item SIMrun now checks for covariance matrices that are not pos-def and offers several solutions
+}
+}
+\subsection{BUG FIXES}{
+\itemize{
+\item Fixed bug in plot.PMmatrix where subjects with all missing observations caused an error.
+\item add=T now functions properly in plot.PMsim when nsim<10.
+\item Fixed error in makeNPDE causing problem with old instruction files.
+\item Updated PMrun to work when data and model files have same root name
+}
+}
+}
+
+\section{Changes in version 1.2.8}{
+
+\subsection{NEW FEATURES}{
+\itemize{
+\item None yet
+}
+}
+\subsection{BUG FIXES}{
+\itemize{
+\item makeNPDE now works properly when the run to use was made with a non-uniform prior
+\item SIMrun developed a bug after introducing covariate simulations such that fixed parameter values weren't handled properly.  This has been corrected.
+\item PMcheck had a bug when TIME=0 observation requirement removed.  Fixed. 
+}
+}
+}
+
+\section{Changes in version 1.2.7}{
+
+\subsection{NEW FEATURES}{
+\itemize{
+\item PMcheck now makes a color-coded .xlsx file with highlighted errors.  This code was co-developed with Patrick Nolain in Limoges, France.
+\item More widespread checking occurs for packages with automatic downloading/installation for those that are missing 
+\item makeNCA now takes a variety of arguments including a run number which can be used to do NCA on an data file or a post object, or a previously loaded data file, or a data file in the working directory
+\item The post and pop objects after an NPAG run now contain the predictions at observation times in addition to the intervals specified by the idelta argument to NPrun
+\item Model file format updated to TSMULTM
+\item Removed PMcheck requirement for no observations at time=0.  Predictions will always be 0 unless non-zero initial conditions or steady-state dosing specified.
+}
+}
+\subsection{BUG FIXES}{
+\itemize{
+\item Fixed bug in covariate simulations when 0-variance covariates are not present
+\item Corrected plot.PMmatrix to handle error bars on observations when C0,C1,C2,C3 missing from data file
+\item Included gamma/lambda in SD for weighting in bias/imprecision - now matches option 6/7 results in old USC*PACK
+\item PMstep now works properly with a datafile containing only one covariate
+\item AIC calc changed in IT2B/NPAG from -TRULOG + (P + Q)  to   2*(-TRULOG + (P + Q)) 
+}
+}
+}
 \section{Changes in version 1.2.6}{
 
 \subsection{NEW FEATURES}{

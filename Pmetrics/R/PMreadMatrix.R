@@ -47,7 +47,7 @@ PMreadMatrix <- function(file,skip=1,delim=",",quiet=F,...){
   
   parnames <- scan(file,skip=skip,what="character",quiet=T,nlines=1,sep=delim,strip.white=T)
   parnames[1] <- "id"
-  data <- read.table(file,skip=skip+1,header=F,na.strings=".",comment.char="#",sep=delim,...)
+  data <- read.table(file,skip=skip+1,header=F,na.strings=".",comment.char="#",sep=delim,stringsAsFactors=F,...)
   names(data) <- tolower(parnames)
 
   

@@ -11,23 +11,26 @@
     }
   }
   
+  #create a global variable/options environment
+  PMenv <<- new.env()
+  
   #find Pmetrics installation folder and set environmental variable
   for(path in .libPaths()){
     if(file.exists(paste(path,"Pmetrics",sep="/"))){
-      Sys.setenv("PmetricsPath" = path)
+      assign("PmetricsPath",path,envir=PMenv)
     }
   }
   #figure out 32 or 64 bit
-  if(length(grep("64-bit",utils::sessionInfo()))>0) {Sys.setenv("PmetricsBit" = "64")} else {Sys.setenv("PmetricsBit" = "32")}
+  if(length(grep("64-bit",utils::sessionInfo()))>0) {assign("PmetricsBit","64",envir=PMenv)} else {assign("PmetricsBit","32",envir=PMenv)}
   
+  #set current number of fixed columns and their names in data file
   
-  #load Defaults package if not installed
-  #   defInstalled <- suppressWarnings(require(Defaults,quietly=T)) #yes this is against convention!!
-  #   if(!defInstalled){
-  #     packageStartupMessage("\nLoading Defaults package to enable custom defaults for any Pmetrics function.\n")
-  #     install.packages("Defaults",dependencies=T,repos="http://cran.cnr.Berkeley.edu")
-  #     require(Defaults,quietly=T)
-  #   }
+  assign("fixedColNames",
+         c("id","evid","time","dur","dose","addl",
+           "ii","input","out","outeq","c0","c1","c2","c3"),
+         envir=PMenv
+  )
+  assign("nfixed",14,envir=PMenv)
   
   #restore user defaults
   if(length(system.file(package="Defaults"))==1){PMreadDefaults()}
@@ -37,6 +40,7 @@
 }
 
 .onAttach <- function(...){
+  
   #version and OS-specific startup messages
   OS <- getOS()
   if(interactive()){

@@ -33,7 +33,7 @@
 #' @seealso \code{\link{makeOP}}, \code{\link{SIMparse}}
 #' @examples
 #' data(PMex1)
-#' op <- makeOP(PMex1)
+#' op <- makeOP(NPdata.1)
 #' makeAUC(op)
 
 makeAUC <- function(data,formula,include,exclude,start=0,end=Inf,icen="median",outeq=1,block=1,method="linear"){
@@ -92,8 +92,8 @@ makeAUC <- function(data,formula,include,exclude,start=0,end=Inf,icen="median",o
     #filter by outeq
     data2 <- data2[data2$outeq==outeq,]
     #filter by include/exclude
-    if(!missing(include)) data2 <- data2[data2$subj %in% include,]
-    if(!missing(exclude)) data2 <- data2[-data2$subj %in% exclude,]
+    if(!missing(include)) data2 <- data2[data2$id %in% include,]
+    if(!missing(exclude)) data2 <- data2[-data2$id %in% exclude,]
     #filter by start and end times
     data2 <- data2[data2$time>=start & data2$time<=end,]
 #     

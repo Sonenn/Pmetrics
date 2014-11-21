@@ -17,8 +17,13 @@
 #' @author Michael Neely
 
 makePost <- function(run,NPdata) {
-  require(utils)
-  require(reshape2)
+  #require(utils)
+  if(length(grep("reshape2",installed.packages()[,1]))==0){
+    install.packages("reshape2",repos="http://cran.cnr.Berkeley.edu",dependencies=T)
+  }
+  reshape2.installed <- require(reshape2)
+  if(!reshape2.installed) stop("Error: connect to internet and re-run makePost to download and install reshape2 package.\n")
+  
   #get data
   if (missing(run)){ #look in current wd
     run <- "."
@@ -127,8 +132,20 @@ makePost <- function(run,NPdata) {
     post <- post[post$icen!="mode",]
   }
   
-  #sort by icen, id, outeq
-  post <- post[order(post$icen,post$id,post$outeq),]
+  #add predictions at observed times
+  op <- makeOP(NPdata)
+  opPost <- op[op$pred.type=="post",]
+  post <- rbind(post,opPost[,c("id","time","icen","pred","outeq","block")])
+  
+  #remove duplicates
+  dupTime <- which(duplicated(post[,c("id","time","icen","outeq","block")]))
+  if(length(dupTime)>0) post <- post[-dupTime,]
+  
+  #sort by icen, id, time, outeq
+  post <- post[order(post$icen,post$id,post$time,post$outeq),]
+  
+ 
+  
   
   class(post) <- c("PMpost","data.frame")
   

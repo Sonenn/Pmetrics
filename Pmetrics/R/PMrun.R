@@ -11,6 +11,15 @@
     modelfile <- suppressWarnings(tryCatch(scan(paste(model,"etc/instr.inx",sep="/"),what="character",quiet=T,skip=4,n=1),error=function(e) NULL))
     modelfile <- Sys.glob(paste(model,"/inputs/",strsplit(modelfile,"\\.")[[1]][1],"*",sep=""))
     if(length(modelfile)>0){
+      if(length(modelfile)>1){
+        for(thisfile in modelfile){
+          firstline <- scan(thisfile, nline=1, what="character",quiet=T)
+          if(firstline[1]!="POPDATA"){
+          modelfile <- thisfile
+          break
+          }
+        }
+      }
       file.copy(from=modelfile,to=getwd())
       model <- basename(modelfile)
     }
@@ -51,17 +60,17 @@
   #get information from datafile
   dataFile <- PMreadMatrix(data,quiet=T)
   
-  #check for errors in data if nocheck=T
-  if(nocheck){
+  #check for errors in data if nocheck=F
+  if(!nocheck){
     err <- PMcheck(dataFile,quiet=T)
     if(attr(err,"error")==-1){
-      endNicely("\nThere are errors in your data file.  Run PMcheck.\n",model,data)
+      endNicely("\nThere are errors in your data file.  See errors.xlsx file in working directory.\n",model,data)
     }
   }
   
-  dataoffset <- 2*as.numeric("addl" %in% names(dataFile))
-  ncov <- ncol(dataFile)-(12+dataoffset)
-  if(ncov>0) {covnames <- names(dataFile)[(13+dataoffset):ncol(dataFile)]} else {covnames <- NA}
+
+  ncov <- getCov(dataFile)$ncov
+  covnames <- getCov(dataFile)$covnames
   numeqt <- max(dataFile$outeq,na.rm=T)
   id <- unique(dataFile$id)
   nsubtot <- length(id)
@@ -349,7 +358,7 @@
     if(type=="NPAG" && prior[1]==0) PMscript[getNext(PMscript)] <- paste(c("mv ","move ","mv ")[OS],basename(prior[2])," ",newdir,c("/inputs","\\inputs","/inputs")[OS],sep="")
     
     #make report
-    reportscript <- paste(normalizePath(Sys.getenv("PmetricsPath"),winslash="/"),"/Pmetrics/report/",
+    reportscript <- paste(normalizePath(get("PmetricsPath",envir=PMenv),winslash="/"),"/Pmetrics/report/",
                           switch(type,NPAG="NP",IT2B="IT",ERR="ERR"),"repScript.R",sep="")
     outpath <- c(paste(workdir,"/",newdir,"/outputs",sep=""),
                  paste(workdir,"\\",newdir,"\\outputs",sep=""),

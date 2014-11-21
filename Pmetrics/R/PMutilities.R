@@ -74,7 +74,7 @@ rmnorm <- function (n, mean,sigma)
 #parse NP_RF file only for final cycle information; used for bootstrapping
 #indpts,ab,corden,nvar,nactve,iaddl,icyctot,par  
 getFinal <- function(outfile="NP_RF0001.TXT"){
-  require(utils)
+  #require(utils)
   #get data
   if (!file.exists(outfile)){stop(paste(outfile,"not found.\n",sep=" "))}
   
@@ -200,7 +200,7 @@ getFinal <- function(outfile="NP_RF0001.TXT"){
 
 #read and set defaults
 PMreadDefaults <- function(){
-  optFile <- paste(Sys.getenv("PmetricsPath"),"/Pmetrics/config/PMopt.Rdata",sep="")
+  optFile <- paste(get("PmetricsPath",envir=PMenv),"/Pmetrics/config/PMopt.Rdata",sep="")
   if(file.exists(optFile)) {
     load(optFile)
     if(!is.null(PMopt)) {
@@ -223,8 +223,8 @@ gfortranCheck <- function(gfortran=Sys.which("gfortran")){
       if(compareVersion(OSversion,"10.9")>=0) OSindex <- 6
       if(compareVersion(OSversion,"10.8")>=0) OSindex <- 0
       if(compareVersion(OSversion,"10.7")==0) OSindex <- 1
-      if(compareVersion(OSversion,"10.7")==-1 & compareVersion(OSversion,"10.6")>=0 & Sys.getenv("PmetricsBit")=="64") OSindex <- 2
-      if(compareVersion(OSversion,"10.7")==-1 & compareVersion(OSversion,"10.6")>=0 & Sys.getenv("PmetricsBit")=="32") OSindex <- 3
+      if(compareVersion(OSversion,"10.7")==-1 & compareVersion(OSversion,"10.6")>=0 & get("PmetricsBit",envir=PMenv)=="64") OSindex <- 2
+      if(compareVersion(OSversion,"10.7")==-1 & compareVersion(OSversion,"10.6")>=0 & get("PmetricsBit",envir=PMenv)=="32") OSindex <- 3
       cat(paste("Opening http://www.lapk.org/gfortran/gfortran.php?OS=",OSindex,sep=""))
       system(paste("open http://www.lapk.org/gfortran/gfortran.php?OS=",OSindex,sep=""))
       
@@ -234,8 +234,8 @@ gfortranCheck <- function(gfortran=Sys.which("gfortran")){
     #gfortran is absent
     if(gfortran!=""){
       #cat("\nPmetrics requires gfortran to run. You do not appear to have a working installation of gfortran.  Launching LAPK website...\n")
-      if(Sys.getenv("PmetricsBit")=="64") OSindex <- 4
-      if(Sys.getenv("PmetricsBit")=="32") OSindex <- 5
+      if(get("PmetricsBit",envir=PMenv)=="64") OSindex <- 4
+      if(get("PmetricsBit",envir=PMenv)=="32") OSindex <- 5
       cat(paste("Opening http://www.lapk.org/gfortran/gfortran.php?OS=",OSindex,sep=""))
       shell(paste("start http://www.lapk.org/gfortran/gfortran.php?OS=",OSindex,sep=""))
     }   
@@ -249,7 +249,7 @@ gfortranCheck <- function(gfortran=Sys.which("gfortran")){
       
     } 
   }
-  return(paste("gfortran -m",Sys.getenv("PmetricsBit")," -w -O3 -o <exec> <files>",sep=""))
+  return(paste("gfortran -m",get("PmetricsBit",envir=PMenv)," -w -O3 -o <exec> <files>",sep=""))
 }
 
 
@@ -285,19 +285,19 @@ parseBlocks <- function(model){
   covar <- blockStart[grep("#cov",headers)]
   secVar <- blockStart[grep("#sec",headers)]  
   bolus <- blockStart[grep("#bol",headers)] 
-  IC <- blockStart[grep("#ini",headers)] 
-  bioavail <- blockStart[grep("#f",headers)] 
+  ini <- blockStart[grep("#ini",headers)] 
+  f <- blockStart[grep("#f",headers)] 
   lag <- blockStart[grep("#lag",headers)] 
   diffeq <- blockStart[grep("#dif",headers)] 
   output <- blockStart[grep("#out",headers)]
   error <- blockStart[grep("#err",headers)]
   extra <- blockStart[grep("#ext",headers)]
   
-  headerPresent <- which(c(length(primVar)>0,length(covar)>0,length(secVar)>0,length(bolus)>0,length(IC)>0,
-                           length(bioavail)>0,length(lag)>0,length(diffeq)>0,length(output)>0,length(error)>0,length(extra)>0))
+  headerPresent <- which(c(length(primVar)>0,length(covar)>0,length(secVar)>0,length(bolus)>0,length(ini)>0,
+                           length(f)>0,length(lag)>0,length(diffeq)>0,length(output)>0,length(error)>0,length(extra)>0))
   if(any(!c(1,9,10) %in% headerPresent)) return(list(status=-1,msg="You must have #Primary, #Output, and #Error blocks at minimum"))
   
-  headerOrder <- c(primVar,covar,secVar,bolus,IC,bioavail,lag,diffeq,output,error,extra)
+  headerOrder <- c(primVar,covar,secVar,bolus,ini,f,lag,diffeq,output,error,extra)
   blockStart <- blockStart[rank(headerOrder)]
   blockStop <- blockStop[rank(headerOrder)]
   
@@ -308,7 +308,7 @@ parseBlocks <- function(model){
   headerPresent <- headerPresent[ok]
   
   #get blocks
-  blocks <- list(primVar=NA,covar=NA,secVar=NA,bolus=NA,IC=NA,bioavail=NA,lag=NA,diffeq=NA,output=NA,error=NA,extra=NA)
+  blocks <- list(primVar=NA,covar=NA,secVar=NA,bolus=NA,ini=NA,f=NA,lag=NA,diffeq=NA,output=NA,error=NA,extra=NA)
   for(i in 1:length(headerPresent)){
     blocks[[headerPresent[i]]] <- modelFile[(blockStart[i]+1):blockStop[i]]
   }
@@ -356,7 +356,7 @@ makeModel <- function(model="model.txt",data="data.csv",engine,write=T,silent=F)
   #check all blocks statements for more than maxwidth characters and insert line break if necessary
   maxwidth <- 60
   blocks <- chunks(x=blocks,maxwidth=maxwidth)
-
+  
   
   #primary variable definitions
   npvar <- length(blocks$primVar)
@@ -515,8 +515,8 @@ makeModel <- function(model="model.txt",data="data.csv",engine,write=T,silent=F)
   if(modelnumeqt != engine$numeqt) return(list(status=-1,msg="\nThe number of output equations in the model file\ndoes not match the maximum value of outeq in your datafile.\n"))
   
   #remove leading pluses from getfa, getix, gettlag if present
-  if(length(grep("^\\+",blocks$bioavail)>0)) blocks$bioavail <- gsub("^\\+","",blocks$bioavail)
-  if(length(grep("^\\+",blocks$IC)>0)) blocks$IC <- gsub("^\\+","",blocks$IC)
+  if(length(grep("^\\+",blocks$f)>0)) blocks$f <- gsub("^\\+","",blocks$f)
+  if(length(grep("^\\+",blocks$ini)>0)) blocks$ini <- gsub("^\\+","",blocks$ini)
   if(length(grep("^\\+",blocks$lag)>0)) blocks$lag <- gsub("^\\+","",blocks$lag)
   
   #variable declarations for fortran and make sure not >maxwidth characters
@@ -554,6 +554,20 @@ makeModel <- function(model="model.txt",data="data.csv",engine,write=T,silent=F)
       fixed <- grep("!",blocks$error[gamlam[1]])
       ierr <- unlist(strsplit(blocks$error[gamlam[1]],"="))
       ierrtype <- gsub("[[:space:]]","",tolower(substr(ierr[1],1,1)))
+      
+      # NPAG error parameters
+      # IERRMOD
+      # 1 SD WITH GAMMA(IEQ) FIXED 
+      # 2 SD*GAMMA, GAMMA(IEQ) IS TO BE ESTIMATED EACH CYCLE.
+      # 3 SD+LAMBDA, LAMBDA(IEQ) IS TO BE ESTIMATED EACH CYCLE.
+      #     
+      #       
+      # IASS
+      # 0 IF Cs ENTERED PATIENT x PATIENT;
+      # 2 IF ONE SET OF ABOVE Cs USED FOR ALL PATIENTS;
+      # 1 IF Cs ALREADY IN PATIENT FILES WILL BE USED; IF A
+      # PATIENT HAS NO C'S, THEN POPULATION C'S WILL BE USED. 
+      
       if(engine$alg=="NP"){
         if(length(fixed)>0){  #gamma is fixed (error for lambda)
           if(ierrtype=="l") return(list(status=-1,msg="\nFixed lambda is not currently implemented in NPAG.\nPlease correct the error block in your model file.\n"))
@@ -582,7 +596,8 @@ makeModel <- function(model="model.txt",data="data.csv",engine,write=T,silent=F)
         iass <- paste(iass,collapse="     ") #clean up iass
       }
       
-      # IERRTYPE
+      # IT2B error parameters
+      # IERRMOD
       # 1 IF GAMMA(IEQ) IS TO REMAIN 1.0 THROUGHOUT THE ANALYSIS;
       # 0 IF THE UPDATED ESTIMATE OF GAMMA(IEQ) IS TO BE ESTIMATED EACH CYCLE.
       # 2 IF Cs ARE TO BE ESTIMATED.
@@ -616,6 +631,7 @@ makeModel <- function(model="model.txt",data="data.csv",engine,write=T,silent=F)
         iass <- rep(1,engine$numeqt) #1 for datafile or general source for asserr
         assfix <- grep("!",asserr) #check for general only (override)
         if(length(assfix)>0){
+          asserr <- gsub("!","",asserr)
           iass[assfix] <- 2
         } 
         comberr <- paste(ierrmod,asserr,iass,iqval,sep="\n",collapse="\n")
@@ -681,7 +697,7 @@ makeModel <- function(model="model.txt",data="data.csv",engine,write=T,silent=F)
   blocks <- lapply(blocks,prespace)
   
   fmod <- list(header=NA,diffeq=NA,output=NA,symbol=NA,getfa=NA,getix=NA,gettlag=NA,anal3=NA)
-  fmod$header <- c("C  TSTMULTK.FOR                          OCT, 2012",blank(2))
+  fmod$header <- c("C  TSTMULTM.FOR                          MAR, 2014",blank(2))
   fmod$diffeq <- c(  space(5,"SUBROUTINE DIFFEQ(NDIM,T,X,XP,RPAR,IPAR)"),
                      space(5,"IMPLICIT REAL*8(A-H,O-Z)"),                   
                      space(5,vardec),                  
@@ -719,7 +735,8 @@ makeModel <- function(model="model.txt",data="data.csv",engine,write=T,silent=F)
                      space(5,"COMMON /INPUT/ R,B"),  
                      space(5,"COMMON /DESCR/ AGE,HEIGHT,ISEX,IETHFLG"),      
                      space(5,"COMMON /CNST2/ NPL,NUMEQT,NDRUG,NADD"),
-                     space(5,"DIMENSION X(20),P(32),Y(6),R(37),B(20),CV(26)"),
+                     space(5,"PARAMETER(MAXNUMEQ=7)"),
+                     space(5,"DIMENSION X(20),P(32),Y(MAXNUMEQ),R(37),B(20),CV(26)"),
                      blank(2),
                      space(8,"DO I = 1, NADD"),       
                      space(10,"CV(I) = R(2*NDRUG + I)"),  
@@ -763,7 +780,8 @@ makeModel <- function(model="model.txt",data="data.csv",engine,write=T,silent=F)
                     space(5,"COMMON /INPUT/ R,B"),  
                     space(5,"COMMON /DESCR/ AGE,HEIGHT,ISEX,IETHFLG"),      
                     space(5,"COMMON /CNST2/ NPL,NUMEQT,NDRUG,NADD"),
-                    space(5,"DIMENSION P(32),R(37),B(20),CV(26),FA(7)"),
+                    space(5,"COMMON /STATE/ X"),
+                    space(5,"DIMENSION P(32),R(37),B(20),CV(26),FA(7),X(20)"),
                     blank(2),
                     space(8,"DO I = 1, NADD"),       
                     space(10,"CV(I) = R(2*NDRUG + I)"),  
@@ -777,7 +795,7 @@ makeModel <- function(model="model.txt",data="data.csv",engine,write=T,silent=F)
                     unlist(lapply(covardef,function(x) space(8,x))),
                     unlist(lapply(svardef,function(x) space(8,x))),
                     blank(1),
-                    unlist(lapply(blocks$bioavail,function(x) space(8,x))),
+                    unlist(lapply(blocks$f,function(x) space(8,x))),
                     blank(1),
                     space(5,"RETURN"),
                     space(5,"END"),
@@ -812,7 +830,7 @@ makeModel <- function(model="model.txt",data="data.csv",engine,write=T,silent=F)
                     unlist(lapply(covardef,function(x) space(8,x))),
                     unlist(lapply(svardef,function(x) space(8,x))),
                     blank(1),
-                    unlist(lapply(blocks$IC,function(x) space(8,x))),
+                    unlist(lapply(blocks$ini,function(x) space(8,x))),
                     blank(1),
                     space(5,"RETURN"),
                     space(5,"END"),
@@ -825,7 +843,8 @@ makeModel <- function(model="model.txt",data="data.csv",engine,write=T,silent=F)
                      space(5,"COMMON /INPUT/ R,B"),  
                      space(5,"COMMON /DESCR/ AGE,HEIGHT,ISEX,IETHFLG"),      
                      space(5,"COMMON /CNST2/ NPL,NUMEQT,NDRUG,NADD"),
-                     space(5,"DIMENSION P(32),R(37),B(20),CV(26),TLAG(7)"),
+                     space(5,"COMMON /STATE/ X"),
+                     space(5,"DIMENSION P(32),R(37),B(20),CV(26),TLAG(7),X(20)"),
                      blank(2),
                      space(8,"DO I = 1, NADD"),       
                      space(10,"CV(I) = R(2*NDRUG + I)"),  
@@ -1046,13 +1065,23 @@ makeModel <- function(model="model.txt",data="data.csv",engine,write=T,silent=F)
   writeLines(unlist(fmod),modelFor)
   #check model file for errors
   OS <- getOS()
+  compiler <- PMFortranConfig()
+  if(is.null(compiler)) return(list(status=-1,msg="Execute PMbuild or PMFortranConfig(reconfig=T) to choose your fortran compiler.\n"))
   
-  if(OS==1 | OS==3){modelErr <- system(paste("gfortran",modelFor,"-fsyntax-only"),intern=T)
-  } else {modelErr <- shell(paste("gfortran",modelFor,"-fsyntax-only"),intern=T)}
+  #build syntax check statement and check model if possible
+  fortran <- strsplit(compiler," ")[[1]][1]
+  syntaxcheck <- NA
+  if(length(grep("gfortran",fortran)>0)){syntaxcheck <- paste(fortran,"-fsyntax-only",modelFor) }
+  if(length(grep("ifort",fortran)>0)){syntaxcheck <- paste(fortran,"/syntax-only",modelFor) }
+  if(length(grep("g95",fortran)>0)){syntaxcheck <- paste(fortran,"-fsyntax-only",modelFor) }
   
-  if(length(attr(modelErr,"status"))>0) return(list(status=-1,msg="\nYou have Fortran syntax errors in your model statments, as detailed above.\n"))
-  
-  
+    if(!is.na(syntaxcheck)){
+    if(OS==1 | OS==3){modelErr <- system(syntaxcheck,intern=T)
+    } else {modelErr <- shell(syntaxcheck,intern=T)}
+    if(length(attr(modelErr,"status"))>0) return(list(status=-1,msg="\nYou have Fortran syntax errors in your model statments, as detailed above.\n"))
+  } else {
+    cat("\nYour fortran compiler does not support model syntax checking.\n")
+  }
   #end of model file creation
   
   #start instruction file creation if not SIM  
@@ -1190,8 +1219,8 @@ makeModel <- function(model="model.txt",data="data.csv",engine,write=T,silent=F)
     cat(paste("\nCovariates in data file: ",c(paste(engine$covnames,collapse=", "),"None")[1+as.numeric(is.na(engine$covnames[1]))]))
     cat(paste("\nCovariates used in model file: ",c(paste(blocks$covar,collapse=", "),"None")[1+as.numeric(blocks$covar[1]=="")]))
     cat(paste("\nSecondary Variables: ",paste(secVarNames,collapse=", "),sep=""))
-    cat(paste("\nModel conditions: ",c("bioavailability term defined, ","no bioavailability term defined, ")[1+as.numeric(blocks$bioavail[1]=="")],
-              c("initial conditions are not zero, ","initial conditions are zero, ")[1+as.numeric(blocks$IC[1]=="")],
+    cat(paste("\nModel conditions: ",c("bioavailability term defined, ","no bioavailability term defined, ")[1+as.numeric(blocks$f[1]=="")],
+              c("initial conditions are not zero, ","initial conditions are zero, ")[1+as.numeric(blocks$ini[1]=="")],
               c("lag term defined","no lag term defined")[1+as.numeric(blocks$lag[1]=="")],
               sep=""))
     if(engine$alg!="SIM") cat(paste("\nNumber of cycles to run:",engine$cycles))
@@ -1729,5 +1758,39 @@ perror1<- function(pH,Kall,nvec){
 
 
 
+# makePMmatrixBlock -------------------------------------------------------
+
+makePMmatrixBlock <- function(mdata){
+  #make event blocks, delimited by evid=4
+  mdata$block <- 1
+  if(any(mdata$evid==4)){
+    blocks <- tapply(mdata$time[mdata$evid==1 | mdata$evid==4],mdata$id[mdata$evid==1 | mdata$evid==4],function(x) sum(x==0))
+    blocks <- blocks[rank(unique(mdata$id))]  #sort blocks back into id order in mdata
+    blocks2 <- unlist(mapply(function(x) 1:x,blocks))
+    time0 <- c(which(mdata$time==0 & mdata$evid!=0),nrow(mdata))
+    blocks3 <- rep(blocks2,times=diff(time0))
+    mdata$block <- c(blocks3,tail(blocks3,1))
+  }
+  return(mdata)
+}
 
 
+# getCov ------------------------------------------------------------------
+
+#function to get covariate information from PMmatrix object
+getCov <- function(mdata){
+  nfixed <- get("nfixed",envir=PMenv)
+  ncolData <- ncol(mdata)
+  ncov <- ncolData - nfixed
+  if(ncov>0){
+    covnames <- names(mdata)[(nfixed+1):ncolData]
+    covstart <- nfixed+1
+    covend <- ncolData
+  } else {
+    covnames <- NA
+    covstart <- NA
+    covend <- NA
+  }
+  
+  return(list(ncov=ncov,covnames=covnames,covstart=covstart,covend=covend))
+}

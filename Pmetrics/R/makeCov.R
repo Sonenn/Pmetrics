@@ -18,7 +18,7 @@
 #' @seealso \code{\link{NPparse}}, \code{\link{ITparse}}, \code{\link{plot.PMcov}}
 #' @examples
 #' data(PMex1)
-#' cov <- makeCov(PMex1)
+#' cov <- makeCov(NPdata.1)
 #' cov
 #' names(cov)
 

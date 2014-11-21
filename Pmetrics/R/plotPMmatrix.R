@@ -44,6 +44,7 @@
 #' @param doses Boolean operator to include doses as small lines at the bottom of the plot.
 #' Infusions are correctly represented according to their duration.  The default is \code{False}.
 #' This parameter is ignored if \code{overlay} is \code{True}.
+#' @param tad Boolean operator to use time after dose rather than time after start.  Default is \code{False}.
 #' @param join Boolean operator to join observations by a straight line; the default is \code{True}.
 #' @param grid Either a boolean operator to plot a reference grid, or a list with elements x and y,
 #' each of which is a vector specifying the native coordinates to plot grid lines; the default is \code{False}.
@@ -60,6 +61,8 @@
 #' @param ylab Label for the y axis.  Default is \dQuote{Observation}
 #' @param col A vector of color names to be used for output equation or group coloring.  If the
 #' length of \code{col} is too short, values will be recycled.
+#' @param col.pred  A vector of color names to be used for prediction (post or pop) coloring.  Default is the same
+#' as \code{col}.
 #' @param cex Size of the plot symbols.
 #' @param legend Either a boolean operator or a list of parameters to be supplied to the \code{\link{legend}}
 #' function (see its documentation).  If \code{False} or missing, a legend will not be plotted.
@@ -82,9 +85,10 @@
 #' data(PMex1)
 #' plot(mdata.1)
 
-plot.PMmatrix <- function(x,include,exclude,pred=NULL,icen="median",mult=1,outeq,group,block=1,layout=c(3,3),log=F,pch=NA,errbar=F,doses=F,
+plot.PMmatrix <- function(x,include,exclude,pred=NULL,icen="median",mult=1,outeq,group,block=1,
+                          layout=c(3,3),log=F,pch=NA,errbar=F,doses=F,tad=F,
                           join=T,grid,ident=F,overlay=T,main,xlim,ylim,
-                          xlab="Time (h)",ylab="Observation",col,cex=1,legend,out=NA,...){
+                          xlab="Time (h)",ylab="Observation",col,col.pred,cex=1,legend,out=NA,...){
   
   #error bar function
   add.ebar <- function(x, y, upper, lower=upper, length=0.05,...){
@@ -101,6 +105,21 @@ plot.PMmatrix <- function(x,include,exclude,pred=NULL,icen="median",mult=1,outeq
   
   data <- x
   
+  #switch to time after dose if requested
+  if(tad){
+    for(i in 1:nrow(data)){
+      if(data$evid[i]!=0){
+        doseTime <- data$time[i]
+        prevDose <- data$dose[i]
+      }
+      data$orig.time[i] <- data$time[i]
+      data$time[i] <- data$time[i] - doseTime
+      data$prevDose[i] <- prevDose
+      if(xlab=="Time (h)") xlab <- "Time After Dose (h)"
+    }
+    data <- data[order(data$id,data$time,-data$evid),]
+  }
+  
   if(!missing(include)){
     data <- subset(data,sub("[[:space:]]+","",as.character(data$id)) %in% as.character(include))
     if(!is.null(pred)) pred <- pred[sub("[[:space:]]+","",as.character(pred$id)) %in% as.character(include),]
@@ -110,7 +129,7 @@ plot.PMmatrix <- function(x,include,exclude,pred=NULL,icen="median",mult=1,outeq
     if(!is.null(pred)) pred <- pred[!sub("[[:space:]]+","",as.character(pred$id)) %in% as.character(exclude),]
   } 
   
-  if(missing(col)) col <- c("black","red","blue","green","purple","orange","pink","gray50")  
+  if(missing(col)) col <- c("black","red","blue","green","purple","orange","pink","gray50") 
   
   #make error bar object
   obsdata <- data[data$evid==0,]
@@ -121,9 +140,8 @@ plot.PMmatrix <- function(x,include,exclude,pred=NULL,icen="median",mult=1,outeq
   } else {
     if(!identical(names(errbar),c("c0","c1","c2","c3"))) stop("\nSee plot.PMmatrix help for structure of errbar argument.\n")
     if(any(sapply(errbar,length)!=max(obsdata$outeq,na.rm=T))) stop("\nSee plot.PMmatrix help for structure of errbar argument.\n")
-    ebar <- with(obsdata[obsdata$evid==0,],
-                 list(plot=T,id=obsdata$id,sd=errbar$c0[obsdata$outeq]+errbar$c1[obsdata$outeq]*obsdata$out+errbar$c2[obsdata$outeq]*obsdata$out^2+errbar$c3[obsdata$outeq]*obsdata$out^3,
-                      outeq=obsdata$outeq))
+    ebar <- list(plot=T,id=obsdata$id,sd=errbar$c0[obsdata$outeq]+errbar$c1[obsdata$outeq]*obsdata$out+errbar$c2[obsdata$outeq]*obsdata$out^2+errbar$c3[obsdata$outeq]*obsdata$out^3,
+                 outeq=obsdata$outeq)
   }
   
   if(!missing(legend)){        
@@ -167,15 +185,8 @@ plot.PMmatrix <- function(x,include,exclude,pred=NULL,icen="median",mult=1,outeq
   numeqt <- max(data$outeq,na.rm=T)
   
   #make event blocks, delimited by evid=4
-  data$block <- 1
-  if(any(data$evid==4)){
-    blocks <- tapply(data$time[data$evid==1 | data$evid==4],data$id[data$evid==1 | data$evid==4],function(x) sum(x==0))
-    blocks <- blocks[rank(unique(data$id))]  #sort blocks back into id order in data
-    blocks2 <- unlist(mapply(function(x) 1:x,blocks))
-    time0 <- c(which(data$time==0 & data$evid!=0),nrow(data))
-    blocks3 <- rep(blocks2,times=diff(time0))
-    data$block <- c(blocks3,tail(blocks3,1))
-  }
+  data <- makePMmatrixBlock(data)
+  
   #filter data and predictions (if present) by block
   data <- data[data$block==block,]
   if(!is.null(pred)){pred <- pred[pred$block==block,]}
@@ -205,14 +216,26 @@ plot.PMmatrix <- function(x,include,exclude,pred=NULL,icen="median",mult=1,outeq
       if(is.null(legend$legend)) legend$legend <- levels(group)
       legend$fill <- col[1:length(legend$legend)]
       #color predicted if supplied
-      if(!is.null(pred)){pred$col <- data$col[match(as.character(pred$id),data$id[data$outeq==outeq])]}
+      if(!is.null(pred)){
+        if(!missing(col.pred)){
+          #make sure there are enough colors; if not, recycle
+          if(length(col.pred)<length(levels(group))) col.pred <- rep(col.pred,ceiling(length(levels(group))/length(col.pred)))
+          pred$col <- col.pred[as.numeric(group)]
+        }else{pred$col <- data$col[match(as.character(pred$id),data$id[data$outeq==outeq])]}
+      }
     } else {
       #no group, so color the single output equqtion
       data$col <- ifelse(!is.na(data$outeq),col[data$outeq],NA)
       if(is.null(legend$legend)) legend$legend <- paste("Output",outeq)
       legend$fill <- col[outeq]
       #color predicted if supplied
-      if(!is.null(pred)){pred$col <- col[outeq]}
+      if(!is.null(pred)){
+        if(!missing(col.pred)){
+          #make sure there are enough colors; if not, recycle
+          if(length(col.pred)<outeq) col.pred <- rep(col.pred,ceiling(outeq/length(col.pred)))
+          pred$col <- col.pred[outeq]
+        }else{pred$col <- col[outeq]}        
+      }
     }
   } else {
     #outeq length>1, so groups won't apply and color by outeq
@@ -224,7 +247,13 @@ plot.PMmatrix <- function(x,include,exclude,pred=NULL,icen="median",mult=1,outeq
     legend$fill <- col[outeq]
     #color predicted if supplied
     if(!is.null(pred)){
-      for(i in outeq){pred$col[pred$outeq==i] <- col[i]}
+      if(!missing(col.pred)){
+        #make sure there are enough colors; if not, recycle
+        if(length(col.pred)<numeqt) col.pred <- rep(col.pred,ceiling(numeqt/length(col.pred)))
+        for(i in outeq){pred$col[pred$outeq==i] <- col.pred[i]}
+      }else{
+        for(i in outeq){pred$col[pred$outeq==i] <- col[i]}
+      }   
     }
     
   }
@@ -232,25 +261,149 @@ plot.PMmatrix <- function(x,include,exclude,pred=NULL,icen="median",mult=1,outeq
   if (missing(xlim)) {xlim.flag <- T} else {xlim.flag <- F}
   if (missing(ylim)) {ylim.flag <- T} else {ylim.flag <- F}
   if (missing(main)) {main.flag <- T} else {main.flag <- F}
-
-
-# PLOTS -------------------------------------------------------------------
-
-#don't overlay
-if(!overlay){
-  par(mfrow=layout)
-  devAskNewPage(ask=T)
   
-  #predicted is supplied
-  if(!is.null(pred)){
-    for (i in unique(data$id)){
-      if (xlim.flag) xlim <- range(c(data$time[data$id==i],pred$time[pred$id==i]),na.rm=T)
-      if (ylim.flag){
-        ylim <- range(c(data$out[data$id==i],pred$pred[pred$id==i]),na.rm=T)
-        if(log){ylim[1][ylim[1]==0] <- 0.5*min(data$out[data$id==i],na.rm=T)}
+  # PLOTS -------------------------------------------------------------------
+  
+  #don't overlay
+  if(!overlay){
+    par(mfrow=layout)
+    devAskNewPage(ask=T)
+    
+    #predicted is supplied
+    if(!is.null(pred)){
+      for (i in unique(data$id)){      
+        if (xlim.flag){
+          xlim <- range(c(data$time[data$id==i],pred$time[pred$id==i]),na.rm=T)
+          if(abs(xlim[1])==Inf | abs(xlim[2])==Inf) xlim <- range(data$time,na.rm=T)
+        }
+        if (ylim.flag){
+          ylim <- range(c(data$out[data$id==i],pred$pred[pred$id==i]),na.rm=T)
+          if(abs(ylim[1])==Inf | abs(ylim[2])==Inf) ylim <- range(data$out,na.rm=T)
+          if(log){ylim[1][ylim[1]==0] <- 0.5*min(data$out[data$id==i],na.rm=T)}
+        }
+        if (main.flag) main <- paste("ID",i)
+        plot(out~time,data=subset(data,data$id==i),xlab=xlab,ylab=ylab,main=main,xlim=xlim,ylim=ylim,log=logplot,type="n",yaxt=yaxt,...)
+        if(missing(grid)){
+          grid <- list(x=NA,y=NA)
+        } else {
+          if(inherits(grid,"logical")){
+            if(grid){
+              grid <- list(x=axTicks(1),y=axTicks(2))
+            } else {
+              grid <- list(x=NA,y=NA)
+            }
+          }
+          if(inherits(grid,"list")){
+            if(is.null(grid$x) | all(!is.na(grid$x))) grid$x <- axTicks(1)
+            if(is.null(grid$y) | all(!is.na(grid$y))) grid$y <- axTicks(2)
+          }
+        }
+        if(yaxt=="n") logAxis(2,grid=!all(is.na(grid$y)))
+        abline(v=grid$x,lty=1,col="lightgray")
+        abline(h=grid$y,lty=1,col="lightgray")
+        for(j in outeq){
+          tempdata <- subset(data,data$id==i & data$outeq==j)
+          temppred <- pred[pred$id==i & pred$outeq==j,]
+          points(out~time,data=tempdata,type=jointype,pch=pch,col=tempdata$col,cex=cex,...)
+          lines(pred~time,data=temppred,col=temppred$col,...)
+          if(ebar$plot){add.ebar(x=tempdata$time[data$evid==0],
+                                 y=tempdata$out[data$evid==0],
+                                 upper=ebar$sd[ebar$id==i & ebar$outeq==j],col=subset(data$col,data$id==i & data$outeq==j))
+          }
+        }
+        if (doses){
+          for(k in 1:ndrug){
+            x <- data$time[data$id==i & data$input==k & !is.na(data$input)]
+            dur <- data$dur[data$id==i & data$input==k & !is.na(data$input)]
+            dur[dur<0.051*diff(xlim)] <- 0.05*diff(xlim)
+            ndose <- length(x)
+            for (l in 1:ndose){
+              xmin <- x[l]
+              xmax <- x[l]+dur[l]
+              ymin <- ylim[1]
+              ymax <- c(ylim[1]+0.1*(ylim[2]-ylim[1]),10**(log10(ylim[1]) + 0.1*log10(ylim[2]/ylim[1])))[1 + as.numeric(log)]
+              abline(v=x[l],lty="dotted",lwd=1,col="black")
+              polygon(x=c(xmin,xmin,xmax,xmax),y=c(ymin,ymax,ymax,ymin),col=col[k],border=NA)
+            }
+          }
+        }
+        if(legend$plot) do.call("legend",legend)
+        
       }
-      if (main.flag) main <- paste("ID",i)
-      plot(out~time,data=subset(data,data$id==i),xlab=xlab,ylab=ylab,main=main,xlim=xlim,ylim=ylim,log=logplot,type="n",yaxt=yaxt,...)
+    } else {
+      #case where there is no predicted
+      for (i in unique(data$id)){
+        if (xlim.flag){
+          xlim <- range(data$time[data$id==i],na.rm=T)
+          if(abs(xlim[1])==Inf | abs(xlim[2])==Inf) xlim <- range(data$time,na.rm=T)
+        }
+        if (ylim.flag){
+          ylim <- range(data$out[data$id==i],na.rm=T)
+          if(abs(ylim[1])==Inf | abs(ylim[2])==Inf) ylim <- range(data$out,na.rm=T)
+          if(log){ylim[1][ylim[1]==0] <- 0.5*min(data$out[data$id==i],na.rm=T)}
+        }
+        if (main.flag) main <- paste("ID",i)
+        plot(out~time,data=subset(data,data$id==i),xlab=xlab,ylab=ylab,main=main,xlim=xlim,ylim=ylim,log=logplot,type="n",yaxt=yaxt,...)
+        if(missing(grid)){
+          grid <- list(x=NA,y=NA)
+        } else {
+          if(inherits(grid,"logical")){
+            if(grid){
+              grid <- list(x=axTicks(1),y=axTicks(2))
+            } else {
+              grid <- list(x=NA,y=NA)
+            }
+          }
+          if(inherits(grid,"list")){
+            if(is.null(grid$x) | all(!is.na(grid$x))) grid$x <- axTicks(1)
+            if(is.null(grid$y) | all(!is.na(grid$y))) grid$y <- axTicks(2)
+          }
+        }
+        
+        if(yaxt=="n") logAxis(2,grid=!all(is.na(grid$y)))
+        abline(v=grid$x,lty=1,col="lightgray")
+        abline(h=grid$y,lty=1,col="lightgray")
+        for(j in outeq){
+          tempdata <- subset(data,data$id==i & data$outeq==j)
+          temppred <- pred[pred$id==i & pred$outeq==j,]
+          points(out~time,data=tempdata,type=jointype,pch=pch,col=tempdata$col,cex=cex,...)
+          if(ebar$plot){add.ebar(x=data$time[data$id==i & data$evid==0 & data$outeq==j],
+                                 y=data$out[data$id==i & data$evid==0 & data$outeq==j],
+                                 upper=ebar$sd[ebar$id==i & ebar$outeq==j],col=subset(data$col,data$id==i & data$outeq==j))
+          }
+        }
+        if (doses){
+          for(k in 1:ndrug){
+            x <- data$time[data$id==i & data$input==k & !is.na(data$input)]
+            dur <- data$dur[data$id==i & data$input==k & !is.na(data$input)]
+            dur[dur<0.01*xlim[2]] <- 0.01*xlim[2]
+            ndose <- length(x)
+            for (l in 1:ndose){
+              xmin <- x[l]
+              xmax <- x[l]+dur[l]
+              ymin <- ylim[1]
+              ymax <- c(ylim[1]+0.1*(ylim[2]-ylim[1]),10**(log10(ylim[1]) + 0.1*log10(ylim[2]/ylim[1])))[1 + as.numeric(log)]
+              abline(v=x[l],lty="dotted",lwd=1,col="black")
+              polygon(x=c(xmin,xmin,xmax,xmax),y=c(ymin,ymax,ymax,ymin),col=col[k],border=NA)
+            }
+          }
+        }
+        if(legend$plot) do.call("legend",legend)
+      }
+    }   
+    devAskNewPage(ask=F)
+    
+  } else {  #there is overlay
+    #predicted suppplied
+    if(!is.null(pred)){
+      if (xlim.flag) xlim <- range(c(data$time,pred$time),na.rm=T)
+      if (ylim.flag){
+        ylim <- range(c(data$out,pred$pred),na.rm=T)
+        if(log){ylim[1][ylim[1]==0] <- 0.5*min(data$out,na.rm=T)}
+      }
+      
+      if (main.flag){main <- ""}
+      plot(out~time,data=data,xlab=xlab,ylab=ylab,main=main,xlim=xlim,ylim=ylim,log=logplot,type="n",yaxt=yaxt,...)
       if(missing(grid)){
         grid <- list(x=NA,y=NA)
       } else {
@@ -262,52 +415,40 @@ if(!overlay){
           }
         }
         if(inherits(grid,"list")){
-          if(is.null(grid$x) | all(!is.na(grid$x))) grid$x <- axTicks(1)
-          if(is.null(grid$y) | all(!is.na(grid$y))) grid$y <- axTicks(2)
+          if(is.null(grid$x)) grid$x <- axTicks(1)
+          if(is.null(grid$y)) grid$y <- axTicks(2)
         }
       }
       if(yaxt=="n") logAxis(2,grid=!all(is.na(grid$y)))
       abline(v=grid$x,lty=1,col="lightgray")
       abline(h=grid$y,lty=1,col="lightgray")
-      for(j in outeq){
-        tempdata <- subset(data,data$id==i & data$outeq==j)
-        temppred <- pred[pred$id==i & pred$outeq==j,]
-        points(out~time,data=tempdata,type=jointype,pch=pch,col=tempdata$col,...)
-        lines(pred~time,data=temppred,col=temppred$col,...)
-        if(ebar$plot){add.ebar(x=tempdata$time[data$evid==0],
-                               y=tempdata$out[data$evid==0],
-                               upper=ebar$sd[ebar$id==i & ebar$outeq==j],col=subset(data$col,data$id==i & data$outeq==j))
-        }
-      }
-      if (doses){
-        for(k in 1:ndrug){
-          x <- data$time[data$id==i & data$input==k & !is.na(data$input)]
-          dur <- data$dur[data$id==i & data$input==k & !is.na(data$input)]
-          dur[dur<0.051*diff(xlim)] <- 0.05*diff(xlim)
-          ndose <- length(x)
-          for (l in 1:ndose){
-            xmin <- x[l]
-            xmax <- x[l]+dur[l]
-            ymin <- ylim[1]
-            ymax <- c(ylim[1]+0.1*(ylim[2]-ylim[1]),10**(log10(ylim[1]) + 0.1*log10(ylim[2]/ylim[1])))[1 + as.numeric(log)]
-            abline(v=x[l],lty="dotted",lwd=1,col="black")
-            polygon(x=c(xmin,xmin,xmax,xmax),y=c(ymin,ymax,ymax,ymin),col=col[k],border=NA)
+      for (i in unique(data$id)){
+        for(j in outeq){
+          tempdata <- subset(data,data$id==i & data$outeq==j)
+          temppred <- pred[pred$id==i & pred$outeq==j,]
+          if(!ident) {
+            points(out~time,data=tempdata,type=jointype,pch=pch,col=tempdata$col,cex=cex,...)
+          } else {
+            lines(out~time,data=tempdata,col=col,...)
+            text(out~time,data=tempdata,labels=tempdata$id,col=col,cex=cex,...)
+          }
+          lines(pred~time,data=temppred,col=temppred$col,...)
+          if(ebar$plot){add.ebar(x=data$time[data$id==i & data$evid==0 & data$outeq==j],
+                                 y=data$out[data$id==i & data$evid==0 & data$outeq==j],
+                                 upper=ebar$sd[ebar$id==i & ebar$outeq==j],col=subset(data$col,data$id==i & data$outeq==j))
           }
         }
       }
       if(legend$plot) do.call("legend",legend)
       
-    }
-  } else {
-    #case where there is no predicted
-    for (i in unique(data$id)){
-      if (xlim.flag) xlim <- range(data$time[data$id==i],na.rm=T)
+    } else { #there is no predicted
+      if (xlim.flag) xlim <- range(data$time,na.rm=T)
       if (ylim.flag){
-        ylim <- range(data$out[data$id==i],na.rm=T)
-        if(log){ylim[1][ylim[1]==0] <- 0.5*min(data$out[data$id==i],na.rm=T)}
-      }
-      if (main.flag) main <- paste("ID",i)
-      plot(out~time,data=subset(data,data$id==i),xlab=xlab,ylab=ylab,main=main,xlim=xlim,ylim=ylim,log=logplot,type="n",yaxt=yaxt,...)
+        ylim <- range(data$out,na.rm=T)
+        if(log){ylim[1][ylim[1]==0] <- 0.5*min(data$out,na.rm=T)}
+      }     
+      if (main.flag){main <- ""}
+      plot(out~time,data=data,xlab=xlab,ylab=ylab,main=main,xlim=xlim,ylim=ylim,log=logplot,type="n",yaxt=yaxt,...)
       if(missing(grid)){
         grid <- list(x=NA,y=NA)
       } else {
@@ -319,139 +460,34 @@ if(!overlay){
           }
         }
         if(inherits(grid,"list")){
-          if(is.null(grid$x) | all(!is.na(grid$x))) grid$x <- axTicks(1)
-          if(is.null(grid$y) | all(!is.na(grid$y))) grid$y <- axTicks(2)
+          if(is.null(grid$x)) grid$x <- axTicks(1)
+          if(is.null(grid$y)) grid$y <- axTicks(2)
         }
       }
-      
       if(yaxt=="n") logAxis(2,grid=!all(is.na(grid$y)))
       abline(v=grid$x,lty=1,col="lightgray")
       abline(h=grid$y,lty=1,col="lightgray")
-      for(j in outeq){
-        tempdata <- subset(data,data$id==i & data$outeq==j)
-        temppred <- pred[pred$id==i & pred$outeq==j,]
-        points(out~time,data=tempdata,type=jointype,pch=pch,col=tempdata$col,...)
-        if(ebar$plot){add.ebar(x=data$time[data$id==i & data$evid==0 & data$outeq==j],
-                               y=data$out[data$id==i & data$evid==0 & data$outeq==j],
-                               upper=ebar$sd[ebar$id==i & ebar$outeq==j],col=subset(data$col,data$id==i & data$outeq==j))
-        }
-      }
-      if (doses){
-        for(k in 1:ndrug){
-          x <- data$time[data$id==i & data$input==k & !is.na(data$input)]
-          dur <- data$dur[data$id==i & data$input==k & !is.na(data$input)]
-          dur[dur<0.01*xlim[2]] <- 0.01*xlim[2]
-          ndose <- length(x)
-          for (l in 1:ndose){
-            xmin <- x[l]
-            xmax <- x[l]+dur[l]
-            ymin <- ylim[1]
-            ymax <- c(ylim[1]+0.1*(ylim[2]-ylim[1]),10**(log10(ylim[1]) + 0.1*log10(ylim[2]/ylim[1])))[1 + as.numeric(log)]
-            abline(v=x[l],lty="dotted",lwd=1,col="black")
-            polygon(x=c(xmin,xmin,xmax,xmax),y=c(ymin,ymax,ymax,ymin),col=col[k],border=NA)
+      for (i in unique(data$id)){
+        for(j in outeq){
+          tempdata <- subset(data,data$id==i & data$outeq==j)
+          if(!ident) {
+            points(out~time,data=tempdata,type=jointype,pch=pch,col=tempdata$col,cex=cex,...)
+          } else {
+            lines(out~time,data=tempdata,col=col,...)
+            text(out~time,data=tempdata,labels=tempdata$id,col=col,cex=cex,...)
+          }
+          if(ebar$plot){add.ebar(x=data$time[data$id==i & data$evid==0 & data$outeq==j],
+                                 y=data$out[data$id==i & data$evid==0 & data$outeq==j],
+                                 upper=ebar$sd[ebar$id==i & ebar$outeq==j],col=subset(data$col,data$id==i & data$outeq==j))
           }
         }
       }
       if(legend$plot) do.call("legend",legend)
     }
-  }   
-  devAskNewPage(ask=F)
+  }            
   
-} else {  #there is overlay
-  #predicted suppplied
-  if(!is.null(pred)){
-    if (xlim.flag) xlim <- range(c(data$time,pred$time),na.rm=T)
-    if (ylim.flag){
-      ylim <- range(c(data$out,pred$pred),na.rm=T)
-      if(log){ylim[1][ylim[1]==0] <- 0.5*min(data$out,na.rm=T)}
-    }
-    
-    if (main.flag){main <- ""}
-    plot(out~time,data=data,xlab=xlab,ylab=ylab,main=main,xlim=xlim,ylim=ylim,log=logplot,type="n",yaxt=yaxt,...)
-    if(missing(grid)){
-      grid <- list(x=NA,y=NA)
-    } else {
-      if(inherits(grid,"logical")){
-        if(grid){
-          grid <- list(x=axTicks(1),y=axTicks(2))
-        } else {
-          grid <- list(x=NA,y=NA)
-        }
-      }
-      if(inherits(grid,"list")){
-        if(is.null(grid$x)) grid$x <- axTicks(1)
-        if(is.null(grid$y)) grid$y <- axTicks(2)
-      }
-    }
-    if(yaxt=="n") logAxis(2,grid=!all(is.na(grid$y)))
-    abline(v=grid$x,lty=1,col="lightgray")
-    abline(h=grid$y,lty=1,col="lightgray")
-    for (i in unique(data$id)){
-      for(j in outeq){
-        tempdata <- subset(data,data$id==i & data$outeq==j)
-        temppred <- pred[pred$id==i & pred$outeq==j,]
-        if(!ident) {
-          points(out~time,data=tempdata,type=jointype,pch=pch,col=tempdata$col,cex=cex,...)
-        } else {
-          lines(out~time,data=tempdata,col=col,...)
-          text(out~time,data=tempdata,labels=tempdata$id,col=col,cex=cex,...)
-        }
-        lines(pred~time,data=temppred,col=temppred$col,...)
-        if(ebar$plot){add.ebar(x=data$time[data$id==i & data$evid==0 & data$outeq==j],
-                               y=data$out[data$id==i & data$evid==0 & data$outeq==j],
-                               upper=ebar$sd[ebar$id==i & ebar$outeq==j],col=subset(data$col,data$id==i & data$outeq==j))
-        }
-      }
-    }
-    if(legend$plot) do.call("legend",legend)
-    
-  } else { #there is no predicted
-    if (xlim.flag) xlim <- range(data$time,na.rm=T)
-    if (ylim.flag){
-      ylim <- range(data$out,na.rm=T)
-      if(log){ylim[1][ylim[1]==0] <- 0.5*min(data$out,na.rm=T)}
-    }            
-    if (main.flag){main <- ""}
-    plot(out~time,data=data,xlab=xlab,ylab=ylab,main=main,xlim=xlim,ylim=ylim,log=logplot,type="n",yaxt=yaxt,...)
-    if(missing(grid)){
-      grid <- list(x=NA,y=NA)
-    } else {
-      if(inherits(grid,"logical")){
-        if(grid){
-          grid <- list(x=axTicks(1),y=axTicks(2))
-        } else {
-          grid <- list(x=NA,y=NA)
-        }
-      }
-      if(inherits(grid,"list")){
-        if(is.null(grid$x)) grid$x <- axTicks(1)
-        if(is.null(grid$y)) grid$y <- axTicks(2)
-      }
-    }
-    if(yaxt=="n") logAxis(2,grid=!all(is.na(grid$y)))
-    abline(v=grid$x,lty=1,col="lightgray")
-    abline(h=grid$y,lty=1,col="lightgray")
-    for (i in unique(data$id)){
-      for(j in outeq){
-        tempdata <- subset(data,data$id==i & data$outeq==j)
-        if(!ident) {
-          points(out~time,data=tempdata,type=jointype,pch=pch,col=tempdata$col,cex=cex,...)
-        } else {
-          lines(out~time,data=tempdata,col=col,...)
-          text(out~time,data=tempdata,labels=tempdata$id,col=col,cex=cex,...)
-        }
-        if(ebar$plot){add.ebar(x=data$time[data$id==i & data$evid==0 & data$outeq==j],
-                               y=data$out[data$id==i & data$evid==0 & data$outeq==j],
-                               upper=ebar$sd[ebar$id==i & ebar$outeq==j],col=subset(data$col,data$id==i & data$outeq==j))
-        }
-      }
-    }
-    if(legend$plot) do.call("legend",legend)
-  }
-}            
-
-#clean up    
-par(mfrow=c(1,1))
-#close device if necessary
-if(inherits(out,"list")) dev.off()
+  #clean up    
+  par(mfrow=c(1,1))
+  #close device if necessary
+  if(inherits(out,"list")) dev.off()
 }

@@ -1,6 +1,6 @@
 #' Perform a stepwise linear regression on all covariates and Bayesian posterior parameters
 #'
-#' This function will perform stepwise linear regressions on a PMcov object loaded by \code{\link{NPload}} or \code{\link{ITload}},
+#' This function will perform stepwise linear regressions on a PMcov object loaded by \code{\link{PMload}},
 #' or made by \code{\link{makeCov}}.  Every covariate in the model will be tested in a stepwise linear regression for their relationships
 #' to each parameter in the model.  Bayesian posterior parameters and individual covariates are used.
 #'
@@ -40,8 +40,8 @@ PMstep <- function(x,icen="median",direction="both"){
   cov.cross <- data.frame(matrix(NA,ncol=nvar,nrow=ncov,dimnames=list(cov=names(sumX)[covStart:covEnd],par=names(sumX)[parStart:parEnd])))
   
   for(i in 1:ncol(cov.cross)){
-    temp <- cbind(sumX[,(ncov+2+i)],sumX[,3:(ncov+2)])
-    names(temp)[1] <- names(sumX)[ncov+2+i]
+    temp <- data.frame(cbind(sumX[,(parStart+i-1)],sumX[,covStart:covEnd]))
+    names(temp) <- c(names(sumX)[parStart+i-1],names(sumX)[covStart:covEnd])
     fo <- as.formula(paste(names(temp)[1]," ~ ",paste(names(temp)[-1],collapse=" + "),sep=""))
     lm.temp <- eval(substitute(lm(fo, temp)))
     step.temp <- step(lm.temp,direction=direction,trace=0)

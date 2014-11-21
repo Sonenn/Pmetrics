@@ -13,11 +13,6 @@ PMbuild <- function(){
   cat("\nChecking for required packages...\n")
   for(i in packages){
     if(system.file(package=i)==""){
-      #tempf? fix for MTSKNN
-      if(i=="MTSKNN") {
-        install.packages(i,repos="http://www.lapk.org/software/Pmetrics/MTSKNN",quiet=T)
-        next
-      }
       if(getOption("repos")[1]=="") {setRepositories()}
       install.packages(i,repos=getOption("repos"),dependencies=T)
     }

@@ -88,7 +88,31 @@
 #' To simulate outputs \emph{only} at the output times in the template data (i.e. EVID=0 events), use \code{predInt=0}, which is the default.
 #' Note that the maximum number of predictions total is 594, so the interval must be sufficiently large to accommodate this for a given
 #' number of output equations and total time to simulate over.  If \code{predInt} is set so that this cap is exceeded, predictions will be truncated.
-#' @param covariate A named list which allows for simulation with covariates.
+#' @param covariate If you are using the results of an NPAG or IT2B run to simulate, i.e. a \emph{PMfinal} object as \code{poppar}, 
+#' then you can also simulate with covariates. This argument is a list with the following names.
+#' \itemize{
+#' \item \code{cov} The name of a PMcov object, such as that loaded with PMload. 
+#' Pmetrics will use this object to calculate the correlation matrix between all covariates and Bayesian posterior parameter values.
+#' \item \code{mean} A named list that allows you to specify a different mean for one or more of the covariates. Each named item in the list is 
+#' the name of a covariate in your data that is to have a different mean. If this argument is missing then the mean covariate values in 
+#' the population will be used for simulation. The same applies to any covariates that are not named in this list.  Example: \code{covariate=list(cov=cov.1,mean=list(wt=50))}.
+#' \item \code{sd} This functions just as the \code{mean} list argument does - allowing you to specify different standard deviations for covariates in the simulation. 
+#' If it, or any covariate in the \code{sd} list is missing, then the standard deviations of the covariates in the population are used. Example: \code{covariate=list(cov=cov.1,sd=list(wt=10))}
+#' \item \code{limits} This is a bit different than the limits for population parameters above.
+#' Here, \code{limits} is similar to \code{mean} and \code{sd} for covariates in that it is 
+#' a named list with the minimum and maximum allowable simulated values for each covariate.  If it is
+#' missing altogether, then no limits will apply.  If it is specified, then named covariates will have the
+#' indicated limits, and covariates not in the list will have limits that are the same as in the
+#' original population.  If you want some to be limited and some to be unlimited, then specify the
+#' unlimited ones as items in this list with very large ranges.  Example: \code{covariate=list(cov=cov.1,limits=list(wt=c(10,70)))}
+#' \item \code{fix} A character vector (not a list) of covariates to fix and not simulate.  In this case
+#' values in the template data file will be used and not simulated.  Example: c(\dQuote{wt}, \dQuote{age})
+#' } 
+#' Whether you use the means and standard deviations in the population 
+#' or specify your own, the covariance matrix in poppar will be augmented by the covariate covariances for any non-fixed covariates. 
+#' The parameter plus covariate means and this augmented covariance matrix will be used for simulations. 
+#' In effect, all non-fixed covariates are moved into the #Primary block of the model file to become parameters that are simulated. 
+#' In fact, a copy of your model file is made with a \dQuote{c} prepended to the model name (e.g. \dQuote{model.txt} -> \dQuote{c_model.txt}).
 #' @param seed The seed for the random number generator.  For \code{nsub} > 1, should be a vector of length equal to \code{nsub}.
 #' Shorter vectors will be recycled as necessary.  Default is -17.
 #' @param ode Ordinary Differential Equation solver log tolerance or stiffness.  Default is -4, i.e. 0.0001.  Higher values will result in faster
@@ -124,7 +148,7 @@
 #' diag(cov) <- (c(0.15,0.15,0.15)*mean)**2
 #' #make the prior for the simulation
 #' poppar <- list(weights,mean,cov)
-#' setwd(paste(normalizePath(Sys.getenv("PmetricsPath"),winslash="/"),"/Pmetrics/example/Sim",sep=""))
+#' setwd(paste(normalizePath(get("PmetricsPath",envir=PMenv),winslash="/"),"/Pmetrics/example/Sim",sep=""))
 #' #run simulation
 #' SIMrun(poppar,"temp1.csv",nsim=15,model="model1.for",obsNoise=c(0.02,0.1,0,0),makecsv="PMex1.csv",outname="example",clean=T)
 #' #extract results of simulation
@@ -149,7 +173,7 @@ SIMrun <- function(poppar,limits=NULL,model="model.txt",data="data.csv",split=F,
   
   #check for files
   while(!file.exists(model)) {
-    model <- readline(paste("The model file",shQuote(paste(getwd(),model)),"does not exist.\nEnter another filename or 'end' to quit: \n")) 
+    model <- readline(paste("The model file",shQuote(paste(getwd(),"/",model,sep="")),"does not exist.\nEnter another filename or 'end' to quit: \n")) 
     if (tolower(model)=="end") {endNicely(paste("No model file specified.\n"),model=-99,data); break}
   }
   
@@ -158,12 +182,12 @@ SIMrun <- function(poppar,limits=NULL,model="model.txt",data="data.csv",split=F,
       data <- readline(paste("The data file",shQuote(paste(getwd(),data)),"does not exist.\nEnter another filename or 'end' to quit: \n")) 
       if (tolower(data)=="end") {endNicely(paste("No data file specified.\n"),model,data=-99); break}
     }
-    data <- PMreadMatrix(data,quiet=T)
+    dataFile <- PMreadMatrix(data,quiet=T)
   }
   
   #check for errors in data if nocheck=T
   if(nocheck){
-    err <- PMcheck(data,quiet=T)
+    err <- PMcheck(dataFile,quiet=T)
     if(attr(err,"error")==-1){
       endNicely("\nThere are errors in your template data file.  Run PMcheck.\n",model,data)
     }
@@ -206,34 +230,57 @@ SIMrun <- function(poppar,limits=NULL,model="model.txt",data="data.csv",split=F,
       cat("\nsplit set to FALSE for covariate simulations.\n")
       flush.console()
     }
-    #check to make sure covariate arugment is list (PMcov, mean, sd, limits)
+    #check to make sure covariate arugment is list (PMcov, mean, sd, limits,fix)
     if(!inherits(covariate,"list")) endNicely("\nThe covariate argument must be a list; see ?SIMrun for help.\n",model,data)
     #check to make sure names are correct
     covArgNames <- names(covariate)
-    badNames <- which(!covArgNames %in% c("cov","mean","sd","limits"))
+    badNames <- which(!covArgNames %in% c("cov","mean","sd","limits","fix"))
     if(length(badNames)>0) endNicely("\nThe covariate argument must be a named list; see ?SIMrun for help.\n",model,data)
     
     #check to make sure first element is PMcov
     if(!inherits(covariate$cov,"PMcov")) endNicely("\nThe cov element of covariate must be a PMcov object; see ?SIMrun for help.\n",model,data)
     #get mean of each covariate and Bayesian posterior parameter
     CVsum <- summary(covariate$cov,"mean")
+    #take out fixed covariates not to be simulated
+    if(length(covariate$fix)>0){
+      fixedCov <- which(names(CVsum) %in% covariate$fix)
+      if(length(fixedCov)>0){      
+        CVsum <- CVsum[,-fixedCov]
+      } 
+      
+    }
     #get correlation matrix
     corCV <- suppressWarnings(cor(CVsum[,-c(1,2)]))
-    #remove those that are missing
+    #remove those that are missing because they have all the same value
     corCVmiss <- which(is.na(corCV[,1]))
-    corCV <- corCV[-corCVmiss,-corCVmiss]
+    if(length(corCVmiss)>0){
+      corCV <- corCV[-corCVmiss,-corCVmiss]
+    }
     nsimcov <- ncol(corCV) - npar
     #augment poppar correlation matrix
     corMat <- poppar$popCor
-    corMat <- cbind(corMat,corCV[(nsimcov+1):(npar+nsimcov),(1:nsimcov)])
-    corMat2 <- cbind(corCV[(1:nsimcov),(nsimcov+1):(npar+nsimcov)],corCV[(1:nsimcov),(1:nsimcov)])
-    corMat <- rbind(corMat,corMat2)
+    if(nsimcov==1){
+      corCVsub <- as.matrix(corCV[(nsimcov+1):(npar+nsimcov),(1:nsimcov)],ncol=1)
+      dimnames(corCVsub)[[2]] <- dimnames(corCV)[[1]][1] #replace dropped name
+      corMat <- cbind(corMat,corCVsub)
+      corMat2 <- as.matrix(c(corCV[(1:nsimcov),(nsimcov+1):(npar+nsimcov)],corCV[(1:nsimcov),(1:nsimcov)]),ncol=1)
+      dimnames(corMat2)[[2]] <- dimnames(corCV)[[1]][1] #replace dropped name  
+      corMat <- rbind(corMat,t(corMat2))
+    } else {
+      corCVsub <- corCV[(nsimcov+1):(npar+nsimcov),(1:nsimcov)]
+      corMat <- cbind(corMat,corCVsub)
+      corMat2 <- cbind(corCV[(1:nsimcov),(nsimcov+1):(npar+nsimcov)],corCV[(1:nsimcov),(1:nsimcov)])
+      corMat <- rbind(corMat,corMat2)
+    }
+ 
     #get SD of covariates
     covSD <- apply(CVsum,2,sd,na.rm=T)
     #remove ID and time
     covSD <- covSD[-c(1,2)]
     #remove those with missing correlation
-    covSD <- covSD[-corCVmiss]
+    if(length(corCVmiss)>0){
+      covSD <- covSD[-corCVmiss]
+    }
     #set SDs of named variables, and use population values for others
     if(length(covariate$sd)>0){
       badNames <- which(!names(covariate$sd) %in% names(covSD))
@@ -254,7 +301,9 @@ SIMrun <- function(poppar,limits=NULL,model="model.txt",data="data.csv",split=F,
     #remove ID and time
     covMean <- covMean[-c(1,2)]
     #remove those with missing correlation
-    covMean <- covMean[-corCVmiss]
+    if(length(corCVmiss)>0){
+      covMean <- covMean[-corCVmiss]
+    }
     #set means of named variables, and use population values for others
     if(length(covariate$mean)>0){
       badNames <- which(!names(covariate$mean) %in% names(covMean))
@@ -271,30 +320,35 @@ SIMrun <- function(poppar,limits=NULL,model="model.txt",data="data.csv",split=F,
     #remove ID and time
     covMin <- covMin[-c(1,2)]
     #remove those with missing correlation
-    covMin <- covMin[-corCVmiss]
+    if(length(corCVmiss)>0){
+      covMin <- covMin[-corCVmiss]
+    }
     #and get max of original population covariates
     covMax <- apply(CVsum,2,max,na.rm=T)
     #remove ID and time
     covMax <- covMax[-c(1,2)]
     #remove those with missing correlation
-    covMax <- covMax[-corCVmiss]
+    if(length(corCVmiss)>0){
+      covMax <- covMax[-corCVmiss]
+    }
     orig.covlim <- cbind(covMin[1:nsimcov],covMax[1:nsimcov])
     
     if(length(covariate$limits)==0){ #limits are omitted altogether
-      covLimits <- orig.covlim #they will be ignored
+      covLimits <- orig.covlim #they will be written to file, but ignored in sim
       omitCovLimits <-T
     } else {
-      if(!is.na(covariate$limits[1]) & is.vector(covariate$limits)){ #limits not NA and specified as vector of length 1 or 2
-        
-        if(length(covariate$limits)==1) covariate$limits <- c(1,covariate$limits)
-        covLimits <- t(apply(orig.covlim,1,function(x) x*covariate$limits))
-      } else {
-        if(is.na(covariate$limits[1])){ #covLimits specified as NA (use limits of original population)
-          covLimits <- orig.covlim
-        } else {covLimits <- covLimits}  #covLimits specified as a matrix
-        
+      #covariate limits are supplied as named list
+      badNames <- which(!names(covariate$limits) %in% names(covMean))
+      if(length(badNames)>0) {endNicely("\nThe limit element of covariate must be a list with parameter names; see ?SIMrun for help.\n",model,data)}
+      #first, make matrix with original covariate limits
+      covLimits <- orig.covlim
+      #now figure out which covariates have different limits and change them
+      goodNames <- which(names(covariate$limits) %in% names(covMean)) 
+      if(length(goodNames)>0){
+        covLimits[goodNames,] <- sapply(goodNames,function(x)
+          covariate$limits[[x]])
       }
-      omitCovLimits <- F
+      omitCovLimits <- F  #we are not omitting covariate limits    
     }
     
     #combine limits and covLimits
@@ -308,7 +362,9 @@ SIMrun <- function(poppar,limits=NULL,model="model.txt",data="data.csv",split=F,
     blocks <- parseBlocks(model)
     covPrim <- sapply(1:nsimcov,function(x) paste(dimnames(orig.covlim)[[1]][x],paste(covLimits[x,],collapse=","),sep=","))
     blocks$primVar <- c(blocks$primVar,covPrim)
-    blocks$covar <- ""
+    if(length(covariate$fix)>0 && length(fixedCov)==0){
+      blocks$covar <- ""  #no fixed covariates so all are moved to #Pri
+    } else { blocks$covar <- covariate$fix} #some fixed, so leave these behind
     blocks <- blocks[unlist(lapply(blocks, function(x) x[1]!=""))]
     
     newmodel <- file(paste("c_",model,sep=""),open="wt")
@@ -325,6 +381,18 @@ SIMrun <- function(poppar,limits=NULL,model="model.txt",data="data.csv",split=F,
     
     #re-assign model
     model <- paste("c_",model,sep="")
+    
+    #remove simulated covariates from data file non-destructively
+    if(length(covariate$fix)>0){
+      keepCov <- which(names(dataFile) %in% covariate$fix)
+      dataFile <- dataFile[,c(1:get("nfixed",PMenv),keepCov)] 
+    } else {
+      dataFile <- dataFile[,1:get("nfixed",PMenv)]
+    }
+    #re-assign data
+    data <- paste("c_",data,sep="")
+    PMwriteMatrix(dataFile,data,override=T)
+    
     #remake poppar
     poppar$popMean <- meanVector
     poppar$popCov <- covMat
@@ -341,22 +409,22 @@ SIMrun <- function(poppar,limits=NULL,model="model.txt",data="data.csv",split=F,
   } #end if (covariate) block
   
   #get information from datafile
-  dataoffset <- 2*as.numeric("addl" %in% names(data))
-  ncov <- ncol(data)-(12+dataoffset)
-  if(ncov>0) {covnames <- names(data)[(13+dataoffset):ncol(data)]} else {covnames <- NA}
-  numeqt <- max(data$outeq,na.rm=T)
+  dataoffset <- 2*as.numeric("addl" %in% names(dataFile))
+  ncov <- ncol(dataFile)-(12+dataoffset)
+  if(ncov>0) {covnames <- names(dataFile)[(13+dataoffset):ncol(dataFile)]} else {covnames <- NA}
+  numeqt <- max(dataFile$outeq,na.rm=T)
   if (missing(include)){
-    include <- unique(data$id)
+    include <- unique(dataFile$id)
   }
   if(!missing(exclude)){
-    include <- unique(data$id)[!unique(data$id) %in% exclude]
+    include <- unique(dataFile$id)[!unique(dataFile$id) %in% exclude]
   }
   nsub <- length(include)
   if(missing(obsNoise)){ #obsNoise not specified, set to 0 for all outeq
     obsNoise <- rep(0,4*numeqt)
   }
   if(all(is.na(obsNoise))){ #obsNoise set to NA, so get coefficients from data file; if missing, set to 0
-    obsNoiseNotMiss <- lapply(1:numeqt,function(x) which(!is.na(data$c0) & data$outeq==x)[1]) #get non-missing coefficients for each output
+    obsNoiseNotMiss <- lapply(1:numeqt,function(x) which(!is.na(dataFile$c0) & dataFile$outeq==x)[1]) #get non-missing coefficients for each output
     
     checkObsNoise <- function(x,outeq){
       if(is.na(x)) {
@@ -365,21 +433,17 @@ SIMrun <- function(poppar,limits=NULL,model="model.txt",data="data.csv",split=F,
           flush.console()
         }
         return(rep(NA,4))
-      } else {return(c(data$c0[x],data$c1[x],data$c2[x],data$c3[x]))}
+      } else {return(c(dataFile$c0[x],dataFile$c1[x],dataFile$c2[x],dataFile$c3[x]))}
     }
     obsNoise <- unlist(lapply(1:numeqt,function(x) checkObsNoise(obsNoiseNotMiss[[x]],x))) 
   }
   
-  #if simulating covariates, then reset ncov and covnames as they have been moved to primary block
-  #   if(simWithCov){
-  #     ncov <- 0
-  #     covnames <- NA
-  #   }
+
   
   #attempt to translate model file into  fortran model file   
   modeltxt <- model
   engine <- list(alg="SIM",ncov=ncov,covnames=covnames,numeqt=numeqt,limits=limits,indpts=-99)
-  trans <- makeModel(model=model,data=data,engine=engine,write=T,silent=silent)
+  trans <- makeModel(model=model,data=dataFile,engine=engine,write=T,silent=silent)
   if(trans$status==-1) {
     endNicely(trans$msg,modeltxt,data)
   } else {
@@ -477,6 +541,26 @@ SIMrun <- function(poppar,limits=NULL,model="model.txt",data="data.csv",split=F,
     pop.cov <- data.frame(poppar[[3]])
   }
   
+  #check to make sure pop.cov (within 15 sig digits, which is in file) is pos-def and fix if necessary
+  posdef <- eigen(signif(pop.cov,15))
+  if(any(posdef$values<0)){
+    cat("Warning: you covariance matrix is not positive definite.\nThis is typically due to small population size.\n")
+    ans <- readline("\nChoose one of the following:\n1) end simulation\n2) fix covariance\n3) set covariances to 0\n ")
+    if(ans==1) stop()
+    if(ans==2){
+      if(length(grep("Matrix",installed.packages()[,1]))==0){
+        install.packages("Matrix",repos="http://cran.cnr.Berkeley.edu",dependencies=T)
+      }
+      require(Matrix)
+      pop.cov <- as.matrix(nearPD(pop.cov,keepDiag=T)$mat)
+    }
+    if(ans==3){
+      pop.cov2 <- diag(0,nrow(pop.cov))
+      diag(pop.cov2) <- diag(pop.cov)
+      pop.cov <- pop.cov2
+    }
+  }
+
   pop.cov[upper.tri(pop.cov)] <- NA
   pop.cov <- as.vector(t(pop.cov))
   pop.cov <- pop.cov[!is.na(pop.cov)]
@@ -540,9 +624,10 @@ SIMrun <- function(poppar,limits=NULL,model="model.txt",data="data.csv",split=F,
   ode <- c(0,10**ode)
   
   #apply limits as necessary
+  #this will result in string with "f" or "r,1" or "r,0,a,b" for fixed, random no limits,
+  #or random with limits a and b, respectively
   if(sum(ptype=="r")>ncol(pop.mean)) stop("You have specified variables to be random in your model file\nthat were not random in poppar.\n")
-  varDF <- data.frame(ptype=ptype,limit=apply(limits,1,function(x) ifelse(all(is.na(x)),1,0)))
-  varDF$limit[varDF$ptype=="f"] <- NA
+  varDF <- data.frame(ptype=ptype,limit=ifelse(ptype=="r",apply(limits,1,function(x) ifelse(all(is.na(x)),1,0)),NA))
   varDF$a[varDF$ptype=="r"] <- limits[,1]
   varDF$b[varDF$ptype=="r"] <- limits[,2]
   varVec <- c(apply(varDF,1,c))
@@ -576,7 +661,7 @@ SIMrun <- function(poppar,limits=NULL,model="model.txt",data="data.csv",split=F,
       flush.console()
     }
     
-    temp <- subset(data,data$id==include[i])
+    temp <- subset(dataFile,dataFile$id==include[i])
     if(nrow(temp)==0){
       if(!silent){
         cat(paste("\nThere is no subject with an ID of ",include[i],". Skipping...\n",sep=""))
@@ -594,7 +679,7 @@ SIMrun <- function(poppar,limits=NULL,model="model.txt",data="data.csv",split=F,
           
         } else {stop("\npredInt is misspecified.  See help for SIMrun.\n")}
       }
-      predTimes <- predTimes[!predTimes %in% data$time[data$evid==0]] #remove prediction times at times that are specified in template
+      predTimes <- predTimes[!predTimes %in% dataFile$time[dataFile$evid==0]] #remove prediction times at times that are specified in template
       numPred <- length(predTimes)
       maxsim <- 594-length(temp$evid[temp$evid==0])
       if(numPred>maxsim){  #too many predictions

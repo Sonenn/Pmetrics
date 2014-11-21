@@ -11,8 +11,7 @@
 #'	\item Column headers in row 2.  These headers are: #ID, EVID, TIME, DUR, DOSE, ADDL, II, INPUT, OUT, OUTEQ,
 #' C0, C1, C2, C3.
 #'  \item No cell should be empty.  It should either contain a value or \dQuote{.} as a placeholder.
-#'	\item Columns after OUTEQ are interpreted as covariates.
-#'	\item All subject records must begin with a dose event (EVID=1).
+#'	\item Columns after C3 are interpreted as covariates.
 #'	\item All subject records must begin with TIME=0.
 #'  \item All dose events (EVID=1) must have entries in ID, EVID, TIME, DUR, DOSE and INPUT.  ADDL and II are optional, but if ADDL is not 0 or
 #' missing, then II is mandatory.
@@ -24,26 +23,20 @@
 #'  \item All times within a subject ID must be monotonically increasing.
 #'  \item All subject IDs must be contiguous.
 #'  \item All rows must have EVID and TIME values.
-#'  \item EVID, TIME, DUR, DOSE, ADDL, II, INPUT, OUT, OUTEQ,
-#' C0, C1, C2, C3 must all have numeric entries.
+#'  \item All columns must be numeric except ID which may be alpha-numeric.
 #'  }
 #'  
-#' To use this function, see the example below.  As another example, assume that 
-#' there is a PMdata object called \dQuote{mdata} loaded in memory.
-#' Also assume that on rows 1, 10, 150, there are incomplete dose records.
-#' 
-#' Use \code{err <- PMcheck(mdata)} to run the check.
-#' To see the rows in mdata with problems, read the report on the console.
-#' In this example, you would use \code{mdata[err$doseComp$results,]}.
+#' To use this function, see the example below.
 #'  
-#' You could then try to fix the problem(s) with \code{mdata2 <- PMcheck(mdata,fix=T)}.  Note that we are now returning
-#' a PMmatrix data object (hopefully cleaned of errors) rather than the PMerr object returned when \code{fix=FALSE}.
+#' After running PMcheck and looking at the errors in the errors.xlsx file, you can fix the
+#' errors manually directly in the errors.xlsx file and resave it as a .csv file.
+#' Alternatively, you could then try to fix the problem(s) with \code{mdata2 <- PMcheck(mdata,fix=T)}.  Note that we are now returning
+#' a PMmatrix data object called mdata2 (hopefully cleaned of errors) rather than the PMerr object returned when \code{fix=FALSE}.
 #' Pmetrics handles each of the errors in the following ways.
 #' \itemize{
 #'  \item If the columns are simply out of order, they will be reordered.  If some are missing, the fix must
 #'  be done by the user, i.e. manually.
 #'  \item All id and covariate values are truncated to 11 characters.
-#'  \item Time=0 observations are deleted.
 #'  \item Missing observations are set to -99 (not \dQuote{.}).
 #'  \item Incomplete dose records are flagged for the user to fix manually.
 #'  \item Incomplete observation records are flagged for the user to fix manually.
@@ -73,123 +66,169 @@
 #' @param quiet Boolean operator to suppress printed output.  Default is false.
 #' @return If \code{fix=TRUE}, then \code{PMcheck} returns a PMmatrix data object which has been
 #' cleaned of errors as much as possible, displaying a report on the console.  
-#' If \code{fix=FALSE}, then \code{PMcheck} returns a list of objects of class \emph{PMerr}.  Each object is itself a list whose 
+#' If \code{fix=FALSE}, then \code{PMcheck} creates a file in the working directory called \dQuote{errors.xlsx}.
+#' This file can be opened by Microsoft Excel or any other program that is capable of reading .xlsx files.  This file
+#' contains highlighted areas that are erroneous, with clarifying comments.  You can correct the errors in the file
+#' and then re-save as a .csv file.
+#' 
+#' When \code{fix=FALSE}, the function also returns a list of objects of class \emph{PMerr}.  Each object is itself a list whose 
 #' first object (\code{$msg}) is a character vector with \dQuote{OK} plus a brief description if there is no error, or the error.  
 #' The second object (\code{$results}) is a vector of the row numbers that contain that error.
 #'  \item{colorder}{The first 14 columns must be named id, evid, time, dur, dose, addl, ii, input, out, outeq, c0, c1, c2, and c3 in that order.} 
-#'  \item{maxchar}{All id and covariate values should be less than or equal to 11 characters.}
-#'  \item{obsT0}{Time=0 events should not be observations.}
-#'  \item{obsMiss}{Missing observations should be -99 (not \dQuote{.}, which is simply a placeholder).}
-#'  \item{doseComp}{Make sure all dose records are complete, i.e. contain id, time, evid=1 or 4, duration (0 for bolus), dose, input number.}
-#'  \item{obsComp}{Make sure all observation records are complete, i.e. contain id, time, output, and outeq number.}
-#'  \item{evid1}{Ensure that each subject's first record is an evid=1.}
-#'  \item{T0}{Make sure each subject's first time=0.}
-#'  \item{covT0}{Make sure that there is an non-missing entry for each covariate at time=0 for each subject.}
-#'  \item{covNumeric}{Ensure that all covariate entries are numeric.}
-#'  \item{timeOrder}{Ensure that all times within a subject ID are monotonically increasing.}
-#'  \item{contigID}{Ensure that all subject IDs are contiguous.}
+#'  \item{maxcharCol}{All column names should be less than or equal to 11 characters.}
+#'  \item{maxcharID}{All id values should be less than or equal to 11 characters.}
 #'  \item{missEVID}{Ensure that all rows have an EVID value.}
 #'  \item{missTIME}{Ensure that all rows have a TIME value.}
-#'  \item{nonNum}{Ensure that all columns which must be numeric are numeric.  These are EVID,
-#'  TIME,DUR,DOSE,ADDL,II,INPUT,OUT,OUTEQ,C0,C1,C2,C3.  Covariate columns are checked separately
-#'  (see above) but also must be numeric.}
+#'  \item{doseDur}{Make sure all dose records are complete, i.e. contain a duration.}
+#'  \item{doseDose}{Make sure all dose records are complete, i.e. contain a dose.}
+#'  \item{doseInput}{Make sure all dose records are complete, i.e. contain an input number.}
+#'  \item{obsOut}{Make sure all observation records are complete, i.e. contain an output.}
+#'  \item{obsOuteq}{Make sure all observation records are complete, i.e. contain and outeq number.}
+#'  \item{T0}{Make sure each subject's first time=0.}
+#'  \item{covT0}{Make sure that there is an non-missing entry for each covariate at time=0 for each subject.}
+#'  \item{timeOrder}{Ensure that all times within a subject ID are monotonically increasing.}
+#'  \item{contigID}{Ensure that all subject IDs are contiguous.}
+#'  \item{nonNum}{Ensure that all columns except ID are numeric.}
 
 
 
-#' @author Michael Neely
+#' @author Michael Neely and Patrick Nolain
 #' @seealso \code{\link{PMwriteMatrix}}, \code{\link{PMreadMatrix}}
 #' @examples
+#' \dontrun{
 #' data(PMex3)
 #' err <- PMcheck(badData)
-#' badData[err$obsLast$results,]
-#' badData[err$covT0$results,]
+#' #look at the errors.xlsx file in the working directory
+#' #try to automatically fix what can be fixed
 #' goodData <- PMcheck(badData,fix=T)
 #' PMcheck(goodData)
 #' #you have to fix manually problems which require data entry
+#' }
 
 
 
 PMcheck <- function(data,model,fix=F,quiet=F){
   
-  
+  if(length(grep("xlsx",installed.packages()[,1]))==0){
+    install.packages("xlsx",repos="http://cran.cnr.Berkeley.edu",dependencies=T)
+  }
+  xlsx.installed <- require(xlsx)
   #here's the subfunction to check for errors
   errcheck <- function(data2,model,quiet=quiet){
-    err <- list(colorder=list(msg="OK - The first 14 columns are appropriately named and ordered.",results=NA),
-                maxchar=list(msg="OK - All columns contain entries of 11 or fewer characters.",results=NA),
-                obsT0=list(msg="OK - No observations are at time 0.",results=NA),
-                obsMiss=list(msg="OK - No missing observations.",results=NA),
-                doseComp=list(msg="OK - All dose records are complete.",results=NA),
-                obsComp=list(msg="OK - All observation records are complete.",results=NA),
-                evid1=list(msg="OK - All subjects have evid=1 as first record.",results=NA),
-                T0=list(msg="OK - All subjects have time=0 as first record.",results=NA),
-                covT0=list(msg="OK - There are no covariates in the dataset.",results=NA),
-                covNumeric=list(msg="OK - there are no covariates in the dataset.",results=NA),
-                timeOrder=list(msg="OK - All times are increasing within a subject, given any EVID=4.",results=NA),
-                contigID=list(msg="OK - All subject IDs are contiguous.",results=NA),
-                missEVID=list(msg="OK - All rows have an EVID value.",results=NA),
-                missTIME=list(msg="OK - All rows have a TIME value.",results=NA),
-                nonNum=list(msg="OK - All columns that must be numeric are numeric.",results=NA)
+    err <- list(colorder=list(msg="OK - The first 14 columns are appropriately named and ordered.",results=NA,col=NA,code=NA),
+                maxCharCol=list(msg="OK - All columns contain entries of 11 or fewer characters.",results=NA,col=NA,code=NA),
+                maxCharID=list(msg="OK - All subject IDs are 11 or fewer characters.",results=NA,col=1,code=1),
+                missEVID=list(msg="OK - All rows have an EVID value.",results=NA,col=2,code=2),
+                missTIME=list(msg="OK - All rows have a TIME value.",results=NA,col=3,code=3),
+                doseDur=list(msg="OK - All dose records have a duration.",results=NA,col=4,code=4),
+                doseDose=list(msg="OK - All dose records have a dose.",results=NA,col=5,code=5),
+                doseInput=list(msg="OK - All dose records have an input.",results=NA,col=8,code=6),
+                obsOut=list(msg="OK - All observation records have an output.",results=NA,col=9,code=7),
+                obsOuteq=list(msg="OK - All observation records have an output equation.",results=NA,col=10,code=8),
+                T0=list(msg="OK - All subjects have time=0 as first record.",results=NA,col=3,code=9),
+                covT0=list(msg="OK - There are no covariates in the dataset.",results=NA,col=15,code=10),
+                timeOrder=list(msg="OK - All times are increasing within a subject, given any EVID=4.",results=NA,col=3,code=11),
+                contigID=list(msg="OK - All subject IDs are contiguous.",results=NA,col=1,code=12),
+                nonNum=list(msg="OK - All columns that must be numeric are numeric.",results=NA,col=NA,code=13)
     )
     #set initial attribute to 0 for no error
     attr(err,"error") <- 0
     
-    # 1 - check to make sure first 14 columns are correct
+    #define fixed column names
+    fixedColNames <- get("fixedColNames",envir=PMenv)
+    
+    #define number of columns and number of covariates
+    numcol <- ncol(data2)
+    numfix <- get("nfixed",envir=PMenv)
+    numcov <- getCov(data2)$ncov
+    
+    # check to make sure first 14 columns are correct
     t <- tolower(names(data2))
     if(any(!c("id","time","evid") %in% t)){
       #must at least have id, evid, and time columns to proceed with the check
       return(-1)
     }
-    if(length(t)<14 | any(!c("id","evid","time","dur","dose","addl","ii","input","out","outeq","c0","c1","c2","c3") %in% t)) {
-      err$colorder$msg <- "FAIL - The first 14 columns must be named id, evid, time, dur, dose, addl, ii, input, out, outeq, c0, c1, c2, and c3 in that order"
+    if(length(t)<numfix | any(!fixedColNames %in% t)) {
+      err$colorder$msg <- paste("FAIL - The first ",numfix," columns must be named id, evid, time, dur, dose, addl, ii, input, out, outeq, c0, c1, c2, and c3 in that order",sep="")
       attr(err,"error") <- -1
-      } else {if(!identical(t[1:14],c("id","evid","time","dur","dose","addl","ii","input","out","outeq","c0","c1","c2","c3"))){
-      err$colorder$msg <- "FAIL - The first 14 columns must be named id, evid, time, dur, dose, addl, ii, input, out, outeq, c0, c1, c2, and c3 in that order."
+    } else {if(!identical(t[1:numfix],fixedColNames)){
+      err$colorder$msg <- paste("FAIL - The first ",numfix," columns must be named id, evid, time, dur, dose, addl, ii, input, out, outeq, c0, c1, c2, and c3 in that order.",sep="")
       attr(err,"error") <- -1}}
-   
-    # 2 - check to make sure ids and cols are 11 char or less
-    t <- which(nchar(as.character(data2$id))>11) | nchar(names(data2)>11)
+    
+    # check to make sure cols names are 11 char or less
+    t <- which(nchar(names(data2))>11)
     if(length(t)>0) {
-      err$maxchar$msg <- "FAIL - The following row numbers have columns that contain entries >11 characters:"
-      err$maxchar$results <- t
+      err$maxCharCol$msg <- "FAIL - The following row numbers have columns that contain entries >11 characters:"
+      err$maxCharCol$results <- t
       attr(err,"error") <- -1
     } 
-    # 3 - check for observations at time 0
-    t <- which(data2$evid==0 & data2$time==0)
+    
+    # check to make sure ids are 11 char or less
+    t <- which(nchar(as.character(data2$id))>11)
     if(length(t)>0) {
-      err$obsT0$msg <-"FAIL - The following row numbers have observations at time 0:"
-      err$obsT0$results <- t
+      err$maxCharID$msg <- "FAIL - The following row numbers have ID values that contain entries >11 characters:"
+      err$maxCharID$results <- t
       attr(err,"error") <- -1
     } 
-    # 4 - check for NA observations (should be -99)
-    t <- which(is.na(data2$out) & data2$evid==0)
+    
+    #check that all records have an EVID value
+    t <- which(is.na(data2$evid))
     if(length(t)>0) {
-      err$obsMiss$msg <- "FAIL - The following row numbers are observations (evid=0) with no entry (should be -99 if missing):"
-      err$obsMiss$results <- t
+      err$missEVID$msg <-"FAIL - The following row numbers have missing EVID values:"
+      err$missEVID$results <- t
       attr(err,"error") <- -1
     } 
-    # 5 - check for complete dose records
-    t <- which(data2$evid!=0 & (is.na(data2$time) | is.na(data2$dur) | is.na(data2$dose) | is.na(data2$input)))
+    
+    #check that all records have an TIME value
+    t <- which(is.na(data2$time))
     if(length(t)>0) {
-      err$doseComp$msg <- "FAIL - The following row numbers have incomplete dose records (unused addl or ii should have '.' placeholders):"
-      err$doseComp$results <- t
+      err$missTIME$msg <-"FAIL - The following row numbers have missing TIME values:"
+      err$missTIME$results <- t
       attr(err,"error") <- -1
     } 
-    # 6 - check for complete observation records
-    t <- which(data2$evid==0 & (is.na(data2$time) | is.na(data2$out) | is.na(data2$outeq)))
+    
+    #check for dur on dose records
+    t <- which(data2$evid!=0 & is.na(data2$dur))
     if(length(t)>0) {
-      err$obsComp$msg <- "FAIL - The following row numbers have incomplete observation records:"
-      err$obsComp$results <- t
+      err$doseDur$msg <- "FAIL - The following row numbers are dose events without DUR (unused addl or ii should have '.' placeholders):"
+      err$doseDur$results <- t
       attr(err,"error") <- -1
     } 
-    # 7 - check for evid=1 as first record for each subject
-    t <- which(tapply(data2$evid,data2$id,function(x) x[1])!=1)
-    t2 <- match(names(t),data2$id)
-    if(length(t)>0){
-      err$evid1$msg <- "FAIL - The following row numbers do not have a dose (evid=1) as the first record:"
-      err$evid1$results <- t2
+    
+    #check for dose on dose records
+    t <- which(data2$evid!=0 & is.na(data2$dose))
+    if(length(t)>0) {
+      err$doseDose$msg <- "FAIL - The following row numbers are dose events without DOSE (unused addl or ii should have '.' placeholders):"
+      err$doseDose$results <- t
       attr(err,"error") <- -1
     } 
-    # 8 - check for time=0 for each subject as first record
+    
+    #check for input on dose records
+    t <- which(data2$evid!=0 & is.na(data2$input))
+    if(length(t)>0) {
+      err$doseInput$msg <- "FAIL - The following row numbers are dose events without INPUT (unused addl or ii should have '.' placeholders):"
+      err$doseInput$results <- t
+      attr(err,"error") <- -1
+    } 
+    
+    #check for out on observation records
+    t <- which(data2$evid==0 & is.na(data2$out))
+    if(length(t)>0) {
+      err$obsOut$msg <- "FAIL - The following row numbers are observation events without OUT:"
+      err$obsOut$results <- t
+      attr(err,"error") <- -1
+    } 
+    
+    #check for outeq on observation records
+    t <- which(data2$evid==0 & is.na(data2$outeq))
+    if(length(t)>0) {
+      err$obsOuteq$msg <- "FAIL - The following row numbers are observation events without OUTEQ:"
+      err$obsOuteq$results <- t
+      attr(err,"error") <- -1
+    }
+    
+
+    #check for time=0 for each subject as first record
     t <- which(tapply(data2$time,data2$id,function(x) x[1])!=0)
     t2 <- match(names(t),data2$id)
     if(length(t)>0){
@@ -197,29 +236,21 @@ PMcheck <- function(data,model,fix=F,quiet=F){
       err$T0$results <- t2
       attr(err,"error") <- -1
     } 
-    #9 was deleted (former requirement to have last event be observation)
-    # 10,11 - covariate checks
-    numcol <- ncol(data2)
-    if(numcol>14){
-      # 10 - check for missing covariates at time 0
+    
+    #covariate checks
+    if(numcov>0){
+      covinfo <- getCov(data2)
+      #check for missing covariates at time 0
       time0 <- which(data2$time==0 & data2$evid==1)
-      if(length(time0)>1) {t <- apply(as.matrix(data2[time0,15:numcol],ncol=numcol-14),1,function(x) any(is.na(x)))} else {t <- is.na(time0)}
+      if(length(time0)>1) {t <- apply(as.matrix(data2[time0,covinfo$covstart:covinfo$covend],ncol=numcov),1,function(x) any(is.na(x)))} else {t <- is.na(time0)}
       if(length(time0[t])>0){
-        err$covT0$msg <- "FAIL - The following row numbers have missing covariate data at time 0."
+        err$covT0$msg <- "FAIL - The following row numbers are subjects with missing covariate data at time 0."
         err$covT0$results <- time0[t]
         attr(err,"error") <- -1
-      } else {err$covT0$msg <- "OK - all subjects have covariate data at time 0."}
-      
-      # 11 - check for non-numeric covariates
-      t <- which(sapply(data2[,15:numcol],function(x) !is.numeric(x)))
-      if(length(t)>0){
-        err$covNumeric$msg <- "FAIL - The following covariates are non-numeric."
-        err$covNumeric$results <- names(data2)[14+t]
-        attr(err,"error") <- -1
-      } else {err$covNumeric$msg <- "OK - all covariates are numeric."}
+      } else {err$covT0$msg <- "OK - All subjects have covariate data at time 0."}
     }
     
-    #12 - check that all times within a given ID block are monotonically increasing
+    #check that all times within a given ID block are monotonically increasing
     misorder <- NA
     for(i in 2:nrow(data2)){
       if((data2$time[i]-data2$time[i-1]<0) & data2$id[i]==data2$id[i-1] & data2$evid[i]!=4) misorder <- c(misorder,i) 
@@ -229,60 +260,159 @@ PMcheck <- function(data,model,fix=F,quiet=F){
       err$timeOrder$results <- misorder[-1]
       attr(err,"error") <- -1
     }
-    #13 - check that all records for a given subject ID are grouped
-    temp <- data.frame(row=as.numeric(rownames(data2)),id=data2$id)
+    #check that all records for a given subject ID are grouped
+    temp <- data.frame(row=1:nrow(data2),id=data2$id)
     t <- tapply(temp$row,temp$id,function(x) any(diff(x)>1))
-    if(any(t)) {t2 <- which(data2$id %in% unique(data2$id)[t])} else {t2 <- NULL}
+    if(any(t)) {t2 <- which(data2$id %in% sort(unique(data2$id))[t])} else {t2 <- NULL}
     if(length(t2)>0){
       err$contigID$msg <- "FAIL - The following rows are from subject IDs that are not contiguous."
       err$contigID$results <- t2
       attr(err,"error") <- -1
     }
-    #14 - check that all records have an EVID value
-    t <- which(is.na(data2$evid))
-    if(length(t)>0) {
-      err$missEVID$msg <-"FAIL - The following row numbers have missing EVID values:"
-      err$missEVID$results <- t
-      attr(err,"error") <- -1
-    } 
-    #15 - check that all records have an EVID value
-    t <- which(is.na(data2$time))
-    if(length(t)>0) {
-      err$missTIME$msg <-"FAIL - The following row numbers have missing TIME values:"
-      err$missTIME$results <- t
-      attr(err,"error") <- -1
-    } 
-    #16 - check that all non-missing colmuns that have to be numeric are numeric
-    allMiss <- which(apply(data2[,2:15],2,function(x) all(is.na(x))))
-    nonNumeric <- which(sapply(data2[,2:15],function(x) !is.numeric(x)))
+    
+    
+    #check that all non-missing colmuns other than ID are numeric
+    allMiss <- which(apply(data2[,2:numcol],2,function(x) all(is.na(x))))
+    nonNumeric <- which(sapply(data2[,2:numcol],function(x) !is.numeric(x)))
     if(length(allMiss)>0){
       nonNumeric <- nonNumeric[!nonNumeric %in% allMiss]
     } 
     if(length(nonNumeric)>0){
-      err$nonNum$msg <-"FAIL - The following columns must be all numeric:"
-      err$nonNum$results <- toupper(c("evid","time","dur","dose","addl","ii","input","out","outeq","c0","c1","c2","c3")[nonNumeric])
+      err$nonNum$msg <-"FAIL - The following columns must be all numeric."
+      err$nonNum$results <- nonNumeric+1
       attr(err,"error") <- -1
     }
     
-    
-    
-    class(err) <- c("PMerr","list")
-    if(!quiet) cat("\nDATA FILE REPORT:\n")
-    if(!quiet) {print(err);flush.console()}
-    
-  
+    #create the color coded Excel file using code from Patrick Nolain
+    if(xlsx.installed){
+      # Definition of a table of n types of errors, each one with 'code' and 'color' properties
+      errorsTable <- data.frame(comment=c("ID > 11 characters",
+                                          "Missing EVID",
+                                          "Missing TIME",
+                                          "Missing DUR for dose event",
+                                          "Missing DOSE for dose event",
+                                          "Missing INPUT for dose event",
+                                          "Missing OUT for output (use -99)",
+                                          "Missing OUTEQ for observation",
+                                          "TIME not 0 at first event for subject",
+                                          "Missing one or more covariate values at TIME=0",
+                                          "TIME entry out of order",
+                                          "Non-contiguous subject ID",
+                                          "Column with non-numeric rows (green)"),
+                                stringsAsFactors=F)
+      numError <- nrow(errorsTable)
+      errorsTable$code <- 1:numError
+      
+      #assign errors with row, column, and code
+      errList <- lapply(err[3:length(err)],function(x) (lapply(x$results,function(y) c(y,x$col,x$code))))
+      errDF <- data.frame(t(data.frame(errList)))
+      row.names(errDF) <- 1:nrow(errDF)
+      names(errDF) <- c("row","column","code")
+      errors <- errDF[!is.na(errDF$row),]
+      
+      
+      
+      class(err) <- c("PMerr","list")
+      if(!quiet) cat("\nDATA FILE REPORT:\n")
+      if(!quiet) {print(err);flush.console()}
+      
+      if(nrow(errors)>0){
+        # Initializing a new Excel Workbook
+        wb <- createWorkbook()
+        pmVersion <- "POPDATA DEC_11"
+        formattedCols <- toupper(names(data2))
+        formattedCols[1] <- "#ID"
+        errColor <- "#FFFF00"  #yellow
+        errColor2 <- "#00FF00"  #green
+        
+        # Adding a new Worksheet
+        sheet <- createSheet(wb, sheetName="errors")
+        
+        # Writing out the header of the Pmetrics data file : version line and data frame column names
+        header <- CellBlock(sheet, 1, 1, 2, numcol)
+        CB.setRowData(header, pmVersion, rowIndex=1, colOffset=0)         # POPDATA...
+        CB.setRowData(header, formattedCols, rowIndex=2, colOffset=0)   # #ID,EVID,...
+        
+        # Defining the block region where outputting the data,
+        # starting from row 3 (i.e. following the header), column 1
+        cb <- CellBlock(sheet, 3, 1, nrow(data2), numcol)
+        
+        
+        # Fill the cell block, starting from its first row & column
+        addDataFrame(data2,sheet,row.names=F,col.names=F,startRow=3,startColumn=1)
+        
+        # Highlight the cells with errors
+        for(i in 1:nrow(errors))
+        {  
+          thisErr <- errors[i,]
+          
+          comment <- errorsTable[errorsTable$code == thisErr$code,]$comment
+          colIndex <- thisErr$column
+          rowIndex <- thisErr$row
+          block <- cb
+          
+          
+          #special highlighting - overwrite some values
+          if(errorsTable$comment[match(thisErr$code,errorsTable$code)]=="Missing one or more covariate values at TIME=0"){  #if covariate error
+            colIndex <- (numfix+1):numcol
+          } 
+          if(errorsTable$comment[match(thisErr$code,errorsTable$code)]=="Column with non-numeric rows (green)"){ #special for non-numeric columns
+            block <- header
+            rowIndex <- 2
+            colIndex <- thisErr$row    #because of the way the error is detected    
+            errRow <- getRows(sheet,rowIndex=2)
+            errCell <- getCells(row=errRow,colIndex=colIndex)
+            
+            is.char.num <- function(x){
+              if(!is.na(x) && suppressWarnings(is.na(as.numeric(x)))){
+                return(T)
+              } else {return(F)}
+            }
+            
+            #find the non-numeric cells in a column
+            rowIndex2 <- which(sapply(data2[,colIndex],is.char.num))
+            #highlight them
+            CB.setFill(cb, Fill(foregroundColor=errColor2, backgroundColor=errColor2),rowIndex = rowIndex2, colIndex = colIndex)
+            
+          } else { #not non-numeric column error
+            errRow <- getRows(sheet,rowIndex=thisErr$row+2)
+            errCell <- getCells(row=errRow,colIndex=thisErr$column)
+          }
+          
+          #add the highlighting and comments
+          CB.setFill(block, Fill(foregroundColor = errColor, backgroundColor=errColor),rowIndex = rowIndex, colIndex = colIndex)
+          lapply(errCell,function(x) createCellComment(cell=x,string=comment,author="Pmetrics"))
+        }
+        
+        # Check for NA values and set '.' as cells content 
+        for(i in 1:nrow(data2))
+        {
+          for(j in 1:numcol)
+          {
+            if(is.na(data2[i,j]))
+            {
+              CB.setRowData(cb, '.', rowIndex=i, colOffset=j-1)
+            }
+          }
+        }
+        
+        
+        # Save the workbook ...
+        saveWorkbook(wb, file = "errors.xlsx")
+      } #end writing of datafile with highlighted errors
+      
+    } else {cat("Unable to write errors.xlsx;\n connect to internet to download and install xlsx package.\n")}
     
     #if no errors in data, and model is specified, check it for errors too
     if(all(unlist(sapply(err,function(x) is.na(x$results)))) & !is.na(model)){
       #get information from data      
-      dataoffset <- 2*as.numeric("addl" %in% names(data2))
-      ncov <- ncol(data2)-(12+dataoffset)
-      if(ncov>0) {covnames <- names(data2)[(13+dataoffset):ncol(data2)]} else {covnames <- NA}
+      
+      if(numcov>0) {covnames <- getCov(data2)$covnames} else {covnames <- NA}
       numeqt <- max(data2$outeq,na.rm=T)  
       
       modeltxt <- model
       #attempt to translate model file into separate fortran model file and instruction files
-      engine <- list(alg="NP",ncov=ncov,covnames=covnames,numeqt=numeqt,indpts=-99,limits=NA)
+      engine <- list(alg="NP",ncov=numcov,covnames=covnames,numeqt=numeqt,indpts=-99,limits=NA)
       
       if(!quiet) cat("\nMODEL REPORT:\n")
       trans <- makeModel(model=model,data=data,engine=engine,write=F,silent=quiet)
@@ -310,146 +440,143 @@ PMcheck <- function(data,model,fix=F,quiet=F){
     if(!quiet) flush.console()
     return(err)
   }
-
-#here's the function to try and fix errors in the data file
-errfix <- function(data2,model,quiet){
-  report <- NA
-  err <- errcheck(data=data2,model=model,quiet=quiet)
-  # 1 - fix first 14 columns
-  if(length(grep("FAIL",err$colorder$msg))>0){
-    fixedcols <- c("id","evid","time","dur","dose","addl","ii","input","out","outeq","c0","c1","c2","c3")
-    t <- tolower(names(data2))
-    PMcols <- match(fixedcols,t)
-    if(any(is.na(PMcols))) {
-      misscols <- fixedcols[is.na(PMcols)]
-      report <- c(report,paste("Cannot fix columns; the following are missing: ",paste(misscols,collapse="'', '"),".",sep=""))
-    } else {
-      covcols <- (1:ncol(data2))[!(1:ncol(data2)) %in% PMcols]
-      data2 <- data2[,c(PMcols,covcols)]
-      report <- c(report,paste("Columns are now ordered appropriately."))  
+  
+  #here's the function to try and fix errors in the data file
+  errfix <- function(data2,model,quiet){
+    report <- NA
+    err <- errcheck(data=data2,model=model,quiet=quiet)
+    #Fix first fixed columns
+    if(length(grep("FAIL",err$colorder$msg))>0){
+      fixedColNames <- get("fixedColNames",envir=PMenv)
+      t <- tolower(names(data2))
+      PMcols <- match(fixedColNames,t)
+      if(any(is.na(PMcols))) {
+        misscols <- fixedColNames[is.na(PMcols)]
+        report <- c(report,paste("Cannot fix columns; the following are missing: ",paste(misscols,collapse="'', '"),".",sep=""))
+      } else {
+        covcols <- (1:numcol)[!(1:numcol) %in% PMcols]
+        data2 <- data2[,c(PMcols,covcols)]
+        report <- c(report,paste("Columns are now ordered appropriately."))  
+      }
     }
-  }
-  # 2 - Make sure ids and cols are 11 char or less
-  if(length(grep("FAIL",err$maxchar$msg))>0){
-    names(data2) <- substr(names(data2),1,11)
-    report <- c(report,paste("Column names are all 11 characters or fewer."))    
-  }
-  # 3 - remove observations at time 0
-  if(length(grep("FAIL",err$obsT0$msg))>0){
-    data2 <- data2[-err$obsT0$results,]
-    report <- c(report,paste("Observations at time 0 have been removed."))    
-    err <- errcheck(data=data2,model=model,quiet=quiet)
-  }
-  # 4 - check for NA observations (should be -99)
-  if(length(grep("FAIL",err$obsMiss$msg))>0){
-    data2 <- data2[err$obsMiss$results,"out"] < -99
-    report <- c(report,paste("Missing observations for evid=0 have been replaced with -99."))    
-    err <- errcheck(data=data2,model=model,quiet=quiet)
-  }
-  # 5 - check for complete dose records
-  if(length(grep("FAIL",err$doseComp$msg))>0){
-    report <- c(report,paste("Dose records (evid=1 or evid=4) must have time, duration, dose and input; addl and ii should be '.' if not needed.  Run PMcheck and fix manually."))    
-  }
-  # 6 - check for complete observation records
-  if(length(grep("FAIL",err$obsComp$msg))>0){
-    report <- c(report,paste("Observation records (evid=0) must have time, out, and outeq. Run PMcheck and fix manually."))    
-  }
-  # 7 - flag evid!=1 as first event
-  if(length(grep("FAIL",err$evid1$msg))>0){
-    report <- c(report,paste("The first event for every subject must be a dose (evid=1). Run PMcheck and fix manually."))    
-  }
-  # 8 - insert dummy doses of 0 for those missing time=0 first events
-  if(length(grep("FAIL",err$T0$msg))>0){
-    T0 <- data2[err$T0$results,]
-    T0$time <- 0; T0$evid <- 1; T0$dose <- 0
-    data2 <- rbind(data2,T0)
-    data2 <- data2[order(data2$id,data2$time),]
-    report <- c(report,paste("Subjects with first time > 0 have had a dummy dose of 0 inserted at time 0."))    
-    err <- errcheck(data=data2,model=model,quiet=quiet)
-  }
+    #Make sure ids and cols are 11 char or less
+    if(length(grep("FAIL",err$maxchar$msg))>0){
+      names(data2) <- substr(names(data2),1,11)
+      report <- c(report,paste("Column names are all 11 characters or fewer."))    
+    }
+    #Check for NA observations (should be -99)
+    if(length(grep("FAIL",err$obsMiss$msg))>0){
+      data2 <- data2[err$obsMiss$results,"out"] < -99
+      report <- c(report,paste("Missing observations for evid=0 have been replaced with -99."))    
+      err <- errcheck(data=data2,model=model,quiet=quiet)
+    }
+    #Check for DUR dose records
+    if(length(grep("FAIL",err$doseDur$msg))>0){
+      report <- c(report,paste("Dose records (evid=1 or evid=4) must have DUR.  Fix manually."))    
+    }
+    #Check for DOSE dose records
+    if(length(grep("FAIL",err$doseDose$msg))>0){
+      report <- c(report,paste("Dose records (evid=1 or evid=4) must have DOSE.  Fix manually."))    
+    }
+    #Check for INPUT dose records
+    if(length(grep("FAIL",err$doseInput$msg))>0){
+      report <- c(report,paste("Dose records (evid=1 or evid=4) must have INPUT.  Fix manually."))    
+    }
+    #Check for OUT observation records
+    if(length(grep("FAIL",err$obsOut$msg))>0){
+      report <- c(report,paste("Observation records (evid=0) must have OUT. Fix manually."))    
+    }
+    #Check for OUTEQ observation records
+    if(length(grep("FAIL",err$obsOuteq$msg))>0){
+      report <- c(report,paste("Observation records (evid=0) must have OUTEQ. Fix manually."))    
+    }
 
-  #10 - alert for missing covariate data2
-  if(length(grep("FAIL",err$covT0$msg))>0){
-    report <- c(report,paste("All covariates must have values for each subject's first event.  Run PMcheck and fix manually."))    
-  }
-  #11 - change non-numeric to numeric covariates
-  if(length(grep("FAIL",err$covNumeric$msg))>0){
-    covcols <- which(names(data2) %in% err$covNumeric$results)
-    data2[,covcols] <- lapply(covcols,function(x) as.numeric(factor(data2[,x])))
-    report <- c(report,paste("Non-numeric covariates have been converted to numeric."))    
-  }
-  
-  #12 - reorder times
-  if(length(grep("FAIL",err$timeOrder$msg))>0){
-    if(any(data2$evid==4)){
-      report <- c(report,paste("Your dataset has EVID=4 events. Unable to sort times automatically."))    
-    } else {
+    #Insert dummy doses of 0 for those missing time=0 first events
+    if(length(grep("FAIL",err$T0$msg))>0){
+      T0 <- data2[err$T0$results,]
+      T0$time <- 0; T0$evid <- 1; T0$dose <- 0
+      data2 <- rbind(data2,T0)
       data2 <- data2[order(data2$id,data2$time),]
-      report <- c(report,paste("Times within each subject have been ordered."))}    
-  }
-  #13 - reorder IDs
-  if(length(grep("FAIL",err$contigID$msg))>0){
-    if(any(data2$evid==4)){
-      report <- c(report,paste("Your dataset has EVID=4 events. Unable to sort subjecst and times automatically."))    
-    } else {
-      data2 <- data2[order(data2$id,data2$time),]
-      report <- c(report,paste("Subjects have been grouped and ordered."))}    
-  }
-  #14 - fix missing EVID
-  if(length(grep("FAIL",err$missEVID$msg))>0){
-    data2$evid[err$missEVID$results] <- ifelse(is.na(data2$dose[err$missEVID$results]),0,1)
-    report <- c(report,paste("EVID for events with doses changed to 1, otherwise 0."))    
-  }
-  
-  #15 - report missing TIME
-  if(length(grep("FAIL",err$missTIME$msg))>0){
-    report <- c(report,paste("Your dataset has missing times.  Please fix manually."))    
-  }
-  
-  #16 - report non-numeric columns
-  if(length(grep("FAIL",err$nonNum$msg))>0){
-    report <- c(report,paste("Your dataset has non-numeric columns.  Please fix manually."))    
-  }
-  
-  if(!quiet) cat("\nFIX DATA REPORT:\n")
-  print(report[-1])
-  flush.console()
-  row.names(data2) <- 1:nrow(data2)
-  return(data2)
-}
-
-#get the data
-if(is.character(data)) {
-  data2 <- tryCatch(suppressWarnings(PMreadMatrix(data,quiet=T)),error = function(e) return(invisible(e)))
-} else {data2 <- data}
-if(missing(model)) model <- NA
-
-#check for errors
-err <- errcheck(data2,model=model,quiet=quiet)
-if(length(err)==1){
-  cat("You must at least have id, evid, and time columns to proceed with the check.\n")
-  flush.console()
-  return(invisible(NULL))
-}
-maxTime <- max(data2$time,na.rm=T)
-if(maxTime>24*48 & !quiet) cat(paste("Warning: The maximum number of AUC intervals in NPAG is 48.\nYour longest event horizon is ",maxTime," hours.\nPmetrics will automatically choose an AUC interval of at least ",ceiling(maxTime/48)," hours during an NPAG run.\nYou can calculate AUCs for other intervals after the run using makeAUC().\n\n",sep=""))
-flush.console()
-
-
-#try to fix errors if asked
-if(fix){
-  if( attr(err,"error")==0){
-    cat("\nFIX DATA REPORT:\n\nThere were no errors found in your data file.\n")
-    return(invisible(err))
-  } else {
-    newdata <- errfix(data=data2,model=model,quiet=quiet)
+      report <- c(report,paste("Subjects with first time > 0 have had a dummy dose of 0 inserted at time 0."))    
+      err <- errcheck(data=data2,model=model,quiet=quiet)
+    }
+    
+    #Alert for missing covariate data
+    if(length(grep("FAIL",err$covT0$msg))>0){
+      report <- c(report,paste("All covariates must have values for each subject's first event.  Fix manually."))    
+    }
+    
+    #Reorder times
+    if(length(grep("FAIL",err$timeOrder$msg))>0){
+      if(any(data2$evid==4)){
+        report <- c(report,paste("Your dataset has EVID=4 events. Unable to sort times automatically."))    
+      } else {
+        data2 <- data2[order(data2$id,data2$time),]
+        report <- c(report,paste("Times for each subject have been ordered."))}    
+    }
+    #Reorder IDs
+    if(length(grep("FAIL",err$contigID$msg))>0){
+      if(any(data2$evid==4)){
+        report <- c(report,paste("Your dataset has EVID=4 events. Unable to sort subjects and times automatically."))    
+      } else {
+        data2 <- data2[order(data2$id,data2$time),]
+        report <- c(report,paste("Subjects have been grouped and ordered."))}    
+    }
+    #Fix missing EVID
+    if(length(grep("FAIL",err$missEVID$msg))>0){
+      data2$evid[err$missEVID$results] <- ifelse(is.na(data2$dose[err$missEVID$results]),0,1)
+      report <- c(report,paste("EVID for events with doses changed to 1, otherwise 0."))    
+    }
+    
+    #Report missing TIME
+    if(length(grep("FAIL",err$missTIME$msg))>0){
+      report <- c(report,paste("Your dataset has missing times.  Fix manually."))    
+    }
+    
+    #Report non-numeric columns
+    if(length(grep("FAIL",err$nonNum$msg))>0){
+      report <- c(report,paste("Your dataset has non-numeric columns.  Fix manually."))    
+    }
+    
+    if(!quiet) cat("\nFIX DATA REPORT:\n")
+    print(report[-1])
     flush.console()
-    return(invisible(newdata))
-  }    
-} else { #didn't ask to fix errors so return error object
-  return(invisible(err))
-}
-
+    row.names(data2) <- 1:nrow(data2)
+    return(data2)
+  }
+  
+  #get the data
+  if(is.character(data)) {
+    data2 <- tryCatch(suppressWarnings(PMreadMatrix(data,quiet=T)),error = function(e) return(invisible(e)))
+  } else {data2 <- data}
+  if(missing(model)) model <- NA
+  
+  #check for errors
+  err <- errcheck(data2,model=model,quiet=quiet)
+  if(length(err)==1){
+    cat("You must at least have id, evid, and time columns to proceed with the check.\n")
+    flush.console()
+    return(invisible(NULL))
+  }
+  maxTime <- max(data2$time,na.rm=T)
+  if(maxTime>24*48 & !quiet) cat(paste("Warning: The maximum number of AUC intervals in NPAG is 48.\nYour longest event horizon is ",maxTime," hours.\nPmetrics will automatically choose an AUC interval of at least ",ceiling(maxTime/48)," hours during an NPAG run.\nYou can calculate AUCs for other intervals after the run using makeAUC().\n\n",sep=""))
+  flush.console()
+  
+  
+  #try to fix errors if asked
+  if(fix){
+    if( attr(err,"error")==0){
+      cat("\nFIX DATA REPORT:\n\nThere were no errors found in your data file.\n")
+      return(invisible(err))
+    } else {
+      newdata <- errfix(data=data2,model=model,quiet=quiet)
+      flush.console()
+      return(invisible(newdata))
+    }    
+  } else { #didn't ask to fix errors so return error object
+    return(invisible(err))
+  }
+  
 }
 
 

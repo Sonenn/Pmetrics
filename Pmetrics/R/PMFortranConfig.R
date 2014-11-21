@@ -41,7 +41,7 @@ PMFortranConfig <- function(reconfig=F){
     cat("by using the command PMFortranConfig(reconfig=T).\n\n")
     cat("In each of the following <exec> is a place holder for the executable file name\n")
     cat("and <files> is a placeholder for the files to be compiled.  Both are required.\n\n")
-    cat(paste("1. gfortran: gfortran -m",Sys.getenv("PmetricsBit")," -w -O3 -o <exec> <files>\n",sep=""))
+    cat(paste("1. gfortran: gfortran -m",get("PmetricsBit",envir=PMenv)," -w -O3 -o <exec> <files>\n",sep=""))
     cat("2. g95: g95 -o -fstatic <exec> <files>\n")
     cat("3. Intel Visual: ifort -o <exec> <files>\n")
     cat("4. Lahey: lf90  <files> -fix -out <exec>\n")
@@ -60,7 +60,8 @@ PMFortranConfig <- function(reconfig=F){
       
       if(as.numeric(choice)<5){
         compiler <- switch(as.numeric(choice),
-                           paste("gfortran -m",Sys.getenv("PmetricsBit")," -w -O3 -o <exec> <files>",sep=""),
+                           paste("gfortran -m",get("PmetricsBit",envir=PMenv)," -w -O3 -o <exec> <files>",sep=""),
+                           #this for parallel: paste("gfortran -m",get("PmetricsBit",envir=PMenv)," -w -O3 -fopenmp -fmax-stack-var-size=32768 -o <exec> <files>",sep=""),
                            "g95 -o -fstatic <exec> <files> ",
                            "ifort -o <exec> <files>",
                            "lf90  <files> -fix -out <exec>")

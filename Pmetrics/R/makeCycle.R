@@ -22,7 +22,7 @@
 #' @seealso \code{\link{NPparse}}, \code{\link{ITparse}},  \code{\link{plot.PMcycle}}
 #' @examples
 #' data(PMex1)
-#' cycle <- makeCycle(PMex1)
+#' cycle <- makeCycle(NPdata.1)
 #' cycle
 #' names(cycle)
 

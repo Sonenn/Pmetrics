@@ -127,18 +127,18 @@ plot.PMsim <- function(x,mult=1,log=T,probs=c(0.05,0.25,0.5,0.75,0.95),outeq=1,
   if(join){jointype <- "o"} else {jointype <- "p"}
   
   sim.out <- simout$obs
-#   nout <- dim(sim.out)[1]
-#   nsim <- dim(sim.out)[2]
-#   nobs <- dim(sim.out)[3]
+  #   nout <- dim(sim.out)[1]
+  #   nsim <- dim(sim.out)[2]
+  #   nobs <- dim(sim.out)[3]
   nout <- max(sim.out$outeq)
   nsim <- nrow(simout$parValues)
   times <- sort(unique(sim.out$time))
   nobs <- length(times)
   
-#   times <- as.numeric(unlist(dimnames(sim.out)[3])) 
-#   sim.out <- matrix(sim.out[outeq,,]*mult,ncol=nobs,byrow=T)
-#   sim <- data.frame(id=rep(1:nsim,nobs),time=rep(times,each=nsim),out=c(t(sim.out)))
-#   
+  #   times <- as.numeric(unlist(dimnames(sim.out)[3])) 
+  #   sim.out <- matrix(sim.out[outeq,,]*mult,ncol=nobs,byrow=T)
+  #   sim <- data.frame(id=rep(1:nsim,nobs),time=rep(times,each=nsim),out=c(t(sim.out)))
+  #   
   sim <- sim.out[sim.out$outeq==outeq,]
   
   if(!all(is.na(probs)) & nsim>=10){
@@ -153,7 +153,7 @@ plot.PMsim <- function(x,mult=1,log=T,probs=c(0.05,0.25,0.5,0.75,0.95),outeq=1,
       u.ci <- ceiling(nsim*probs + qnorm(1-(1-ci)/2)*sqrt(nsim*probs*(1-probs)))
       return(u.ci)
     }
-
+    
     sim.lconfint <- tapply(sim$out,sim$time,function(x) sort(x)[lower.confint(length(x))])
     sim.uconfint <- tapply(sim$out,sim$time,function(x) sort(x)[upper.confint(length(x))])
     sim.sum <- data.frame(time=rep(times,each=length(probs)),out=unlist(sim.quant),
@@ -239,28 +239,28 @@ plot.PMsim <- function(x,mult=1,log=T,probs=c(0.05,0.25,0.5,0.75,0.95),outeq=1,
     if(nsim<10) cat("\nQuantiles not calculated with fewer than 10 simulated profiles.\n")
     if (missing(ylim)){ylim <- c(min(c(sim$out,mult*obs$obs),na.rm=T),max(c(sim$out,mult*obs$obs),na.rm=T))}
     if (missing(xlim)){xlim <- c(min(c(sim$time,obs$time),na.rm=T),max(c(sim$time,obs$time),na.rm=T))}
-    
-    plot(out~time,data=sim,type="n",log=logplot,xlab=xlab,ylab=ylab,cex.lab=cex.lab,xlim=xlim,ylim=ylim,yaxt=yaxt,...)
-    if(missing(grid)){
-      grid <- list(x=NA,y=NA)
-    } else {
-      if(inherits(grid,"logical")){
-        if(grid){
-          grid <- list(x=axTicks(1),y=axTicks(2))
-        } else {
-          grid <- list(x=NA,y=NA)
+    if(!add){
+      plot(out~time,data=sim,type="n",log=logplot,xlab=xlab,ylab=ylab,cex.lab=cex.lab,xlim=xlim,ylim=ylim,yaxt=yaxt,...)
+      if(missing(grid)){
+        grid <- list(x=NA,y=NA)
+      } else {
+        if(inherits(grid,"logical")){
+          if(grid){
+            grid <- list(x=axTicks(1),y=axTicks(2))
+          } else {
+            grid <- list(x=NA,y=NA)
+          }
+        }
+        if(inherits(grid,"list")){
+          if(is.null(grid$x)) grid$x <- axTicks(1)
+          if(is.null(grid$y)) grid$y <- axTicks(2)
         }
       }
-      if(inherits(grid,"list")){
-        if(is.null(grid$x)) grid$x <- axTicks(1)
-        if(is.null(grid$y)) grid$y <- axTicks(2)
-      }
-    }
-    if(yaxt=="n") logAxis(2,grid=!all(is.na(grid$y)))
-    abline(v=grid$x,lty=1,col="lightgray")
-    abline(h=grid$y,lty=1,col="lightgray")
-    
-    
+      if(yaxt=="n") logAxis(2,grid=!all(is.na(grid$y)))
+      abline(v=grid$x,lty=1,col="lightgray")
+      abline(h=grid$y,lty=1,col="lightgray")
+      
+    } #end !add block
     for (i in unique(sim$id)){
       points(out~time,subset(sim,sim$id==i),pch=pch,type=jointype,...)
     }

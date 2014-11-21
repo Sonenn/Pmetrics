@@ -17,9 +17,16 @@ summary.PMcov <- function(x,icen="median"){
     data <- x[x$icen==icen,]
     data <- subset(data,select=-icen) 
   } else {data <- x}
-  sumCov <- aggregate(data,list(data$id),match.fun(icen),na.rm=T)
-  #remove the first grouping column
-  sumCov <- sumCov[,-1]
+  #get order of ID in case non-numeric
+  allID <- unique(data$id)
+  orderID <- rank(allID)
+  sumCov <- aggregate(data[,-1],list(data$id),match.fun(icen),na.rm=T)
+  #reorder in ID order
+  sumCov <- sumCov[orderID,]
+  #replace the first grouping column with ID again
+  sumCov[,1] <- allID
+  names(sumCov)[1] <- "id"
+  #set the attribute to be the type of summary
   attr(sumCov,"icen") <- icen
   return(sumCov)
 }

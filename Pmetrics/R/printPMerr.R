@@ -17,8 +17,7 @@ print.PMerr <- function(x,...){
     if(is.na(x[[i]]$results[1])) {
       cat(paste("(",i,") ",x[[i]]$msg,"\n",sep=""))
     } else {
-      if(i==16){cat(paste("\n(",i,") ",x[[i]]$msg," ",paste(x[[i]]$results,collapse=", "),"\n\n",sep=""))
-      } else {cat(paste("\n(",i,") ",x[[i]]$msg," Access the rows in your data with 'data[err$",names(x)[i],"$results,]', replacing 'err' with the name of this error object.\n",paste(x[[i]]$results,collapse=", "),"\n\n",sep=""))}
+      cat(paste("\n(",i,") ",x[[i]]$msg," See the 'errors.xlsx' file in current directory.\n",paste(x[[i]]$results,collapse=", "),"\n\n",sep=""))
     }
   }
   

@@ -21,8 +21,6 @@
 #' distributions, or "mean".  Default is "median".#' @param outeq Number of the output equation to compare; default is 1
 #' @param plot Boolean operator selecting whether to generate observed vs. predicted plots for each data object
 #' as in \code{\link{plot.PMop}}
-#' @param resid Boolean operator selecting whether to generate residual plots for each data object
-#' as in \code{\link{plot.PMop}}, ignored if \code{plot} is false.
 #' @return A data frame with the following objects for each model to analyze:
 #'  \item{run }{The run number of the data}
 #'  \item{type }{NPAG or IT2B data}
@@ -43,10 +41,7 @@
 #'  \item{pval }{P-value for each model compared to the first. See details.}
 #' @author Michael Neely
 #' @seealso \code{\link{PMload}}, \code{\link{plot.PMop}}, \code{\link{mtsknn.eq}}
-#' @examples
-#' data(PMex1) #NPAG results
-#' data(PMex2) #IT2B results
-#' PMcompare(NPdata.1,ITdata.1) #doesn't make much sense but gives the idea
+
 
 PMcompare <- function (x,y,...,icen="median",outeq=1,plot=F){
   if(missing(x) | missing(y)) stop("You must specify at least two run numbers for PMcompare.\n")

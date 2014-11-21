@@ -27,7 +27,7 @@
 #' @seealso \code{\link{NPparse}}, \code{\link{ITparse}}, \code{\link{plot.PMop}}, \code{\link{summary.PMop}}
 #' @examples
 #' data(PMex1)
-#' op <- makeOP(PMex1)
+#' op <- makeOP(NPdata.1)
 #' op
 #' names(op)
 #' summary(op)
@@ -37,7 +37,11 @@
 
 makeOP <- function(data){
   
-  require(reshape2)
+  if(length(grep("reshape2",installed.packages()[,1]))==0){
+    install.packages("reshape2",repos="http://cran.cnr.Berkeley.edu",dependencies=T)
+  }
+  reshape2.installed <- require(reshape2)
+  if(!reshape2.installed) stop("Error: connect to internet and re-run makeOP to download and install reshape2 package.\n")
   
   if(!inherits(data,"NPAG") & !inherits(data,"IT2B")) stop(paste("Use NPparse() or ITparse() to generate a Pmetrics NPAG or IT2B object.\n"))
   
@@ -78,6 +82,16 @@ makeOP <- function(data){
       c3 <- c(data$outputs[,8])
       
       obspred$obsSD <- c0+c1*obspred$obs+c2*obspred$obs**2+c3*obspred$obs**3
+      
+      if(data$ERRmod==2){  #SD*gamma
+        obspred$obsSD <- obspred$obsSD*tail(data$igamlam,1)
+      }
+      if(data$ERRmod==3){ #SD+lambda
+        obspred$obsSD <- obspred$obsSD+tail(data$igamlam,1)
+      }
+      if(data$ERRmod==4){ #gamma
+        obspred$obsSD <- tail(data$igamlam,1)
+      }
       obspred$d <- obspred$pred-obspred$obs
       obspred$ds <- (obspred$pred-obspred$obs)**2
       obspred$wd <- (obspred$pred-obspred$obs)/obspred$obsSD

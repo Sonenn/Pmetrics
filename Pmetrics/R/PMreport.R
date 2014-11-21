@@ -7,6 +7,7 @@
 #'
 #' @param wd The working directory containing the NP_RFxxxx.TXT or IT_RFxxxx.TXT file
 #' @param icen Median (default), mean or mode of Bayesian posterior to be used to calculate predictions.
+#' @param type \dQuote{NPAG} (default) or \dQuote{IT2B} report type
 #' @return Several files are placed in the \code{wd}
 #' \item{NPAGreport.html or IT2Breport.html }{An .html file containing a summary of all the results}
 #' \item{poppoints.csv }{NPAG only: A .csv file containing the population support points and probabilities}
@@ -35,7 +36,7 @@ PMreport <- function(wd,icen="median",type="NPAG"){
   if(length(grep("xtable",installed.packages()[,1]))==0){
     install.packages("xtable",repos="http://cran.cnr.Berkeley.edu",dependencies=T)
   }
-  require(xtable)
+  xtable.installed <- require(xtable)
   
   setwd(wd)
   
@@ -341,7 +342,7 @@ PMreport <- function(wd,icen="median",type="NPAG"){
           TEX(" $\\cdot$ \\hyperlink{tableofcontents}{Back to Contents} $\\cdot$ \\hyperlink{ppe}{Next Section} \\newline
           \\newline")
           s1<- final$popPoints
-          tab1 <- xtable(s1)
+          if(xtable.installed) {tab1 <- xtable(s1)} else {tab1 <- "Package xtable not installed"}
           print(tab1, file=CurrentTEXfile, append=T, floating=FALSE)
         }
         
@@ -353,7 +354,7 @@ PMreport <- function(wd,icen="median",type="NPAG"){
         TEX(" \\hyperlink{tableofcontents}{Back to Contents} $\\cdot$ \\hyperlink{covforppe}{Next Section} \\newline
           \\newline")
         s2<- report.table
-        tab2 <- xtable(s2)
+        if(xtable.installed) {tab2 <- xtable(s2)} else {tab2 <- "Package xtable not installed."}
         print(tab2, file=CurrentTEXfile, append=T, floating=FALSE)
         
         TEX("\\newpage
@@ -364,7 +365,7 @@ PMreport <- function(wd,icen="median",type="NPAG"){
         TEX(" \\hyperlink{tableofcontents}{Back to Contents} $\\cdot$ \\hyperlink{corforppe}{Next Section} \\newline
           \\newline")
         s3<- final$popCov
-        tab3 <- xtable(s3)
+        if(xtable.installed) {tab3 <- xtable(s3)} else {tab3 <- "Package xtable not installed."}
         print(tab3, file=CurrentTEXfile, append=T, floating=FALSE)
         #correlation matrix
         TEX("
@@ -374,7 +375,7 @@ PMreport <- function(wd,icen="median",type="NPAG"){
         TEX(" \\hyperlink{tableofcontents}{Back to Contents} $\\cdot$ \\hyperlink{opp}{Next Section} \\newline
           \\newline")
         s4<- final$popCor
-        tab4 <- xtable(s4)
+        if(xtable.installed) {tab4 <- xtable(s4)} else {tab4 <- "Package xtable not installed."}
         print(tab4, file=CurrentTEXfile, append=T, floating=FALSE)
       }
       
