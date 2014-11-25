@@ -15,9 +15,9 @@ Description: This package contains functions to run and
     semi-parametric Monte-Carlo simulations.
 Author@R: person("Michael", "Neely",
     email="mneely@usc.edu", role="aut")
-Version: 1.3.0
+Version: 1.3.1
 URL: http://www.lapk.org
-Date: 2014-10-7
+Date: 2014-11-27
 Depends:
     R (>= 3.0.0),
     utils,

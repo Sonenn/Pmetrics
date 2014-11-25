@@ -1,4 +1,19 @@
 \name{NEWS}
+
+\section{Changes in version 1.3.1}{
+
+\subsection{NEW FEATURES}{
+\itemize{
+\item None yet
+}
+}
+\subsection{BUG FIXES}{
+\itemize{
+\item covariate argument now works properly for alphanumeric ID and when no covariates are fixed
+}
+}
+}
+
 \section{Changes in version 1.3.0}{
 
 \subsection{NEW FEATURES}{

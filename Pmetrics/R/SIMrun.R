@@ -273,10 +273,8 @@ SIMrun <- function(poppar,limits=NULL,model="model.txt",data="data.csv",split=F,
       corMat <- rbind(corMat,corMat2)
     }
  
-    #get SD of covariates
-    covSD <- apply(CVsum,2,sd,na.rm=T)
-    #remove ID and time
-    covSD <- covSD[-c(1,2)]
+    #get SD of covariates (removing ID and time)
+    covSD <- apply(CVsum[,-c(1,2)],2,sd,na.rm=T)
     #remove those with missing correlation
     if(length(corCVmiss)>0){
       covSD <- covSD[-corCVmiss]
@@ -297,9 +295,7 @@ SIMrun <- function(poppar,limits=NULL,model="model.txt",data="data.csv",split=F,
       }
     }
     #get means of covariates
-    covMean <- apply(CVsum,2,mean,na.rm=T)
-    #remove ID and time
-    covMean <- covMean[-c(1,2)]
+    covMean <- apply(CVsum[,-c(1,2)],2,mean,na.rm=T)
     #remove those with missing correlation
     if(length(corCVmiss)>0){
       covMean <- covMean[-corCVmiss]
@@ -316,17 +312,13 @@ SIMrun <- function(poppar,limits=NULL,model="model.txt",data="data.csv",split=F,
     meanVector <- c(poppar$popMean,covMean[1:nsimcov])
     #get the covariate limits
     #get min of original population covariates
-    covMin <- apply(CVsum,2,min,na.rm=T)
-    #remove ID and time
-    covMin <- covMin[-c(1,2)]
+    covMin <- apply(CVsum[,-c(1,2)],2,min,na.rm=T)
     #remove those with missing correlation
     if(length(corCVmiss)>0){
       covMin <- covMin[-corCVmiss]
     }
     #and get max of original population covariates
-    covMax <- apply(CVsum,2,max,na.rm=T)
-    #remove ID and time
-    covMax <- covMax[-c(1,2)]
+    covMax <- apply(CVsum[,-c(1,2)],2,max,na.rm=T)
     #remove those with missing correlation
     if(length(corCVmiss)>0){
       covMax <- covMax[-corCVmiss]
