@@ -335,10 +335,10 @@ SIMrun <- function(poppar,limits=NULL,model="model.txt",data="data.csv",split=F,
       #first, make matrix with original covariate limits
       covLimits <- orig.covlim
       #now figure out which covariates have different limits and change them
-      goodNames <- which(names(covariate$limits) %in% names(covMean)) 
+      goodNames <- which(names(covMean) %in% names(covariate$limits)) 
       if(length(goodNames)>0){
-        covLimits[goodNames,] <- sapply(goodNames,function(x)
-          covariate$limits[[x]])
+        covLimits[goodNames,] <- t(sapply(1:length(goodNames),function(x)
+          covariate$limits[[x]]))
       }
       omitCovLimits <- F  #we are not omitting covariate limits    
     }
@@ -562,6 +562,9 @@ SIMrun <- function(poppar,limits=NULL,model="model.txt",data="data.csv",split=F,
   #output based on the template; otherwise, we will use the specified prior
   
   if(nsim==0 & inherits(poppar,"NPAG")){
+    if(!missing(covariate)){ #can't simulate from each point with covariate sim
+      endNicely(paste("You cannot simulate each point with simulated covariates.\n"),model,data)
+    }
     popPoints <- poppar$popPoints
     #put it all together in the following order
     #2:                             enter values from "results of BIG NPAG run"

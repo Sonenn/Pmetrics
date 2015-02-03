@@ -1070,8 +1070,6 @@ NPparse <- function(outfile="NP_RF0001.TXT"){
           postden[jsub,iactve,ivar]<-temp1[count]
           count <- count+1
         }
-        #get probs for each posterior point
-        postden[jsub,iactve,nvar+1] <- postden[jsub,iactve,nvar+1] * prod(ab[,2]-ab[,1]) / nactvepost[jsub]
       }
     }
     count <- 1

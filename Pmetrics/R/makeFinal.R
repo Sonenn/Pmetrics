@@ -30,6 +30,11 @@
 #' names(final)
 
 makeFinal <- function(data){
+  if(length(grep("reshape2",installed.packages()[,1]))==0){
+    install.packages("reshape2",repos="http://cran.cnr.Berkeley.edu",dependencies=T)
+  }
+  reshape2.installed <- require(reshape2,warn.conflicts=F,quietly=T)
+  if(!reshape2.installed) stop("Error: connect to internet and re-run makePTA to download and install reshape2 package.\n")
   
   if(!inherits(data,"NPAG") & !inherits(data,"IT2B")) stop(paste("Use PMparse() to generate an Pmetrics NPAG or IT2B object.\n")) 
   if(inherits(data,"NPAG")){                                    
@@ -67,6 +72,14 @@ makeFinal <- function(data){
     dimnames(popCov) <- list(data$par,data$par)
     if (all(!is.na(popCor))) dimnames(popCor) <- list(data$par,data$par)
     
+    
+    temp1 <- melt(data$postden)
+    postPoints <- dcast(temp1,subj+nactvepost~density,value.var="value")
+    postPoints <- postPoints[!is.na(postPoints$prob),]
+    postPoints$prob <- postPoints$prob*wParVol
+    names(postPoints)[1:2] <- c("id","point")
+    postPoints$id <- data$sdata$id[postPoints$id]
+    
     #     if(data$icyctot>0) {
     #       popMedian <- data$iaddl[6,,data$icyctot]
     #     } else {
@@ -102,7 +115,7 @@ makeFinal <- function(data){
     
     
     outlist <- list(popPoints=popPoints,popMean=popMean,popSD=popSD,popCV=popCV,popVar=popVar,
-                    popCov=popCov,popCor=popCor,popMedian=popMedian,gridpts=gridpts,nsub=data$nsub,ab=data$ab)
+                    popCov=popCov,popCor=popCor,popMedian=popMedian,gridpts=gridpts,nsub=data$nsub,ab=data$ab,postPoints=postPoints)
     class(outlist)<-c("PMfinal","NPAG","list")
     return(outlist)
   }

@@ -1,10 +1,27 @@
 \name{NEWS}
 
+\section{Changes in version 1.3.2}{
+
+\subsection{NEW FEATURES}{
+\itemize{
+\item None
+}
+}
+\subsection{BUG FIXES}{
+\itemize{
+\item Fixed makeFinal bug regarding posterior density
+\item Scaled bivariate NPAG final plots properly
+}
+}
+}
+
+
 \section{Changes in version 1.3.1}{
 
 \subsection{NEW FEATURES}{
 \itemize{
-\item None yet
+\item Added Bayesian posterior parameter points to final object as final$postden
+\item Added a plot method to plot.PMfinal to plot posterior distributions for a given parameter and set of subjects.
 }
 }
 \subsection{BUG FIXES}{
