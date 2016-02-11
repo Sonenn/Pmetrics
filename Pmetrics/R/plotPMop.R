@@ -103,6 +103,12 @@ plot.PMop <- function(x,include,exclude,pred.type="post",icen="median",outeq=1,m
   
   #filter missing observations and predictions
   data <- data[!is.na(data$obs) & !is.na(data$pred),]
+  #check for no observations
+  if(nrow(data)==0){
+    plot(x=1:10,y=1:10,xaxt="n",yaxt="n",xlab="Predicted",ylab="Observed",type="n")
+    text("No observations",x=5.5,y=5,)
+    return(invisible())
+  }
   data$obs <- mult*data$obs
   data$pred <- mult*data$pred
   if (log){

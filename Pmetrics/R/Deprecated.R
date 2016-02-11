@@ -35,3 +35,10 @@ PMdiag <- function(){
   cat("\nPMdiag is deprecated.  Use makeNPDE() instead to internally validate a model.\n")
 }
 
+PMreadDefaults <- function(){
+  cat("\nPMreadDefaults is deprecated.  Use getPMoptions() instead to read Pmetrics options.\n")
+}
+
+PMwriteDefaults <- function(){
+  cat("\nPMwriteDefaults is deprecated.  Use setPMoptions() instead to set Pmetrics options.\n")
+}

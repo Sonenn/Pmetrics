@@ -37,12 +37,12 @@ summary.PMpta <- function(x,ci=0.95,...){
     pdi2$quantile <- rep(c("median","lowerCI","upperCI"),each=ntarg,times=nsim)
     pdi3 <- dcast(pdi2,target+simnum~quantile,value.var="pdi") 
   } else { #random targets
-    pdi.median <- tapply(x$results$pdi,x$results$simnum,median,na.rm=T,simplify=F)
+    pdi.median <- unlist(tapply(x$results$pdi,x$results$simnum,median,na.rm=T,simplify=F))
     pdi.lower <- tapply(x$results$pdi,x$results$simnum,quantile,probs=0.5-ci/2,na.rm=T)
     pdi.upper <- tapply(x$results$pdi,x$results$simnum,quantile,probs=0.5+ci/2,na.rm=T)
     pdi <- rbind(pdi.median,pdi.lower,pdi.upper)
-    pdi2 <- melt(pdi,value.name="pdi",varnames="simnum")
-    pdi2$quantile <- rep(c("median","lowerCI","upperCI"),each=ntarg,times=nsim)
+    pdi2 <- melt(pdi,value.name="pdi",varnames=c("sumstat","simnum"))
+    pdi2$quantile <- rep(c("median","lowerCI","upperCI"),times=nsim)
     pdi3 <- dcast(pdi2,simnum~quantile,value.var="pdi") 
   } 
 

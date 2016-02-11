@@ -20,4 +20,5 @@ print.MMopt <- function(x){
     cat(paste("Sample ",i,": ",x$sampleTime[i],"\n",sep=""))
   }
   cat(paste("\nBayes Risk: ",x$bayesRisk,"\n",sep=""))
+  
 }

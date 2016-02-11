@@ -84,7 +84,8 @@
 #' to the maximal time in the template file, per subject if nsub > 1.  You may also specify \code{predInt}
 #' as a vector of 3 values, e.g. \code{c(1,4,1)}, similar to the R command \code{\link{seq}}, where the
 #' first value is the start time, the second is the stop time, and the third is the
-#' step value.  Outputs for times specified in the template file will also be simulated.
+#' step value.  Finally, you can have multiple such intervals by specifying \code{predInt} as a list of such
+#' vectors, e.g. \code{list(c(0,24,1),c(72,96,1))}.  Outputs for times specified in the template file will also be simulated.
 #' To simulate outputs \emph{only} at the output times in the template data (i.e. EVID=0 events), use \code{predInt=0}, which is the default.
 #' Note that the maximum number of predictions total is 594, so the interval must be sufficiently large to accommodate this for a given
 #' number of output equations and total time to simulate over.  If \code{predInt} is set so that this cap is exceeded, predictions will be truncated.
@@ -272,7 +273,7 @@ SIMrun <- function(poppar,limits=NULL,model="model.txt",data="data.csv",split=F,
       corMat2 <- cbind(corCV[(1:nsimcov),(nsimcov+1):(npar+nsimcov)],corCV[(1:nsimcov),(1:nsimcov)])
       corMat <- rbind(corMat,corMat2)
     }
- 
+    
     #get SD of covariates (removing ID and time)
     covSD <- apply(CVsum[,-c(1,2)],2,sd,na.rm=T)
     #remove those with missing correlation
@@ -412,10 +413,15 @@ SIMrun <- function(poppar,limits=NULL,model="model.txt",data="data.csv",split=F,
     include <- unique(dataFile$id)[!unique(dataFile$id) %in% exclude]
   }
   nsub <- length(include)
-  if(missing(obsNoise)){ #obsNoise not specified, set to 0 for all outeq
+  if(missing(obsNoise)){ #obsNoise not specified, set to 0 for all outeq or NA (will use model file values) if makecsv
     obsNoise <- rep(0,4*numeqt)
+    if(!missing(makecsv)){
+      obsNoise <- rep(NA,4*numeqt)
+      cat("Setting obsNoise to model file assay error.  When making a csv file, you cannot specify no obsNoise.\n")
+      flush.console()
+    }
   }
-  if(all(is.na(obsNoise))){ #obsNoise set to NA, so get coefficients from data file; if missing, set to 0
+  if(all(is.na(obsNoise))){ #obsNoise set to NA, so get coefficients from data file; if missing will grab from model file later
     obsNoiseNotMiss <- lapply(1:numeqt,function(x) which(!is.na(dataFile$c0) & dataFile$outeq==x)[1]) #get non-missing coefficients for each output
     
     checkObsNoise <- function(x,outeq){
@@ -430,7 +436,7 @@ SIMrun <- function(poppar,limits=NULL,model="model.txt",data="data.csv",split=F,
     obsNoise <- unlist(lapply(1:numeqt,function(x) checkObsNoise(obsNoiseNotMiss[[x]],x))) 
   }
   
-
+  
   
   #attempt to translate model file into  fortran model file   
   modeltxt <- model
@@ -478,15 +484,26 @@ SIMrun <- function(poppar,limits=NULL,model="model.txt",data="data.csv",split=F,
     PMbuild()
   }
   compiler <- PMFortranConfig()
-  if(is.null(compiler)) {cat("\nExecute SIMrun after gfortran is installed.\n");return(invisible(NULL))}
+  #choose serial compiliation
+  if(length(compiler)==2){
+    compiler <- compiler[1]
+  }
+  if(is.null(compiler)) {cat("\nExecute SIMrun after fortran is installed.\n");return(invisible(NULL))}
   
-  enginefiles <- shQuote(normalizePath(list.files(fortSource,pattern="SIMeng",full.names=T)))
+  enginefiles <- shQuote(normalizePath(list.files(fortSource,pattern="sSIMeng",full.names=T)))
   enginecompile <- sub("<exec>","montbig.exe",compiler)
   enginecompile <- sub("<files>",enginefiles,enginecompile,fixed=T)
   
   if(missing(makecsv)){
     makecsv <- 0
   } else {
+    if(nsim>50){
+      ans <- readline("Warning: creating a csv file with more than 50 simulations can take a very long time.\nDo you wish to proceed (y/n)?")
+      if(ans=="n"){
+        cat("\nAborting simulation...\n")
+        return()
+      }
+    }
     if(file.exists(makecsv)) file.remove(makecsv)
     orig.makecsv <- makecsv
     makecsv <- c("1","abcde.csv")
@@ -552,7 +569,7 @@ SIMrun <- function(poppar,limits=NULL,model="model.txt",data="data.csv",split=F,
       pop.cov <- pop.cov2
     }
   }
-
+  
   pop.cov[upper.tri(pop.cov)] <- NA
   pop.cov <- as.vector(t(pop.cov))
   pop.cov <- pop.cov[!is.na(pop.cov)]
@@ -665,15 +682,26 @@ SIMrun <- function(poppar,limits=NULL,model="model.txt",data="data.csv",split=F,
       next
     }
     #add prediction times if necessary
-    if(predInt[1]>0){
-      if(length(predInt)==1){
-        predTimes <- rep(seq(0,ceiling(max(temp$time,na.rm=T)),predInt)[-1],each=numeqt)
-      }else{
+    predTimes <- NA
+    if(is.list(predInt)){ #predInt is a list of (start,end,interval)
+      if(any(sapply(predInt,length)!=3)){stop("If a list, each element of predInt must be of the form c(start,end,interval).\n")}
+      predTimes <- sapply(predInt,function(x) rep(seq(x[1],x[2],x[3]),each=numeqt))
+      #catenate columns into single vector
+      predTimes <- c(predTimes)
+    } else { #predTimes is not a list
+      if(length(predInt)==1){ #predInt is a single value
+        if(predInt!=0){ #it is not zero
+          predTimes <- rep(seq(0,ceiling(max(temp$time,na.rm=T)),predInt)[-1],each=numeqt)
+        } #it was 0 so do nothing
+      }else{ #predInt is a single vector of c(start,stop,interval)
         if(length(predInt)==3){
           predTimes <- rep(seq(predInt[1],predInt[2],predInt[3]),each=numeqt)
-          
         } else {stop("\npredInt is misspecified.  See help for SIMrun.\n")}
       }
+    }
+    #now, if predInt was specified in any way, predTimes will not be NA
+    if(!is.na(predTimes[1])){
+      predTimes <- predTimes[predTimes>0] #remove predictions at time 0
       predTimes <- predTimes[!predTimes %in% dataFile$time[dataFile$evid==0]] #remove prediction times at times that are specified in template
       numPred <- length(predTimes)
       maxsim <- 594-length(temp$evid[temp$evid==0])
@@ -751,7 +779,7 @@ SIMrun <- function(poppar,limits=NULL,model="model.txt",data="data.csv",split=F,
   }
   #clean up csv files if made
   if(length(makecsv)==2){
-    trunc <- ceiling(log10(nsim+1))
+    trunc <- ceiling(log10(nsim+1))+1
     temp <- PMreadMatrix("abcde1.csv",quiet=T)
     simnum <- unlist(lapply(temp$id,function(x) substr(gsub("[[:space:]]","",x),9-trunc,8)))
     temp$id <- paste(include[1],simnum,sep="_")

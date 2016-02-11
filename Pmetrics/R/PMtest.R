@@ -45,7 +45,7 @@ PMtest <- function(){
   rep <- c("/","\\\\","/")[OS]
   
   #generate the names of the permanent modules  
-  prepfiles <- shQuote(normalizePath(list.files(fortSource,pattern="NPprep",full.names=T)))
+  prepfiles <- shQuote(normalizePath(list.files(fortSource,pattern="sNPprep",full.names=T)))
   
   #generate names of files that will be created
   prepFileName <- "np_prep"
@@ -58,12 +58,12 @@ PMtest <- function(){
                paste("./",prepFileName," MacOSX",sep=""))[OS]
   
   #generate the compile statements  
-  prepcompile <- sub("<exec>",prepFileName,compiler)
+  prepcompile <- sub("<exec>",prepFileName,compiler[1])
   prepcompile <- sub("<files>",prepfiles,prepcompile,fixed=T)
   
   #compile prep program as test
   if (OS==1 | OS==3){  #Mac and Linux
-    error=system(paste(prepcompile,"2>error.txt"))
+    error <- system(paste(prepcompile,"2>error.txt"))
     if(error!=0){
       errormsg <- readLines("error.txt")
       if(length(grep("command not found",errormsg[1]))>0){
@@ -75,7 +75,7 @@ PMtest <- function(){
   } 
   
   if (OS==2){  #Windows
-    error=suppressWarnings(shell(paste(prepcompile,"2>error.txt")))
+    error <- suppressWarnings(shell(paste(prepcompile,"2>error.txt")))
     if(error!=0){
       errormsg <- readLines("error.txt")
       if(length(grep("is not recognized",errormsg[1]))>0){

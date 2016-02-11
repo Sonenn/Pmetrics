@@ -214,7 +214,8 @@ plot.PMmatrix <- function(x,include,exclude,pred=NULL,icen="median",mult=1,outeq
       if(length(col)<length(levels(group))) col <- rep(col,ceiling(length(levels(group))/length(col)))
       data$col <- col[as.numeric(group)]
       if(is.null(legend$legend)) legend$legend <- levels(group)
-      legend$fill <- col[1:length(legend$legend)]
+      if(is.null(legend$fill)) legend$fill <- col[1:length(legend$legend)]
+      if(is.na(legend$fill[1])) legend$fill <- NULL
       #color predicted if supplied
       if(!is.null(pred)){
         if(!missing(col.pred)){
@@ -227,7 +228,9 @@ plot.PMmatrix <- function(x,include,exclude,pred=NULL,icen="median",mult=1,outeq
       #no group, so color the single output equqtion
       data$col <- ifelse(!is.na(data$outeq),col[data$outeq],NA)
       if(is.null(legend$legend)) legend$legend <- paste("Output",outeq)
-      legend$fill <- col[outeq]
+      if(is.null(legend$fill)) legend$fill <- col[outeq]
+      if(is.na(legend$fill[1])) legend$fill <- NULL
+      
       #color predicted if supplied
       if(!is.null(pred)){
         if(!missing(col.pred)){
@@ -244,7 +247,9 @@ plot.PMmatrix <- function(x,include,exclude,pred=NULL,icen="median",mult=1,outeq
     if(length(col) < numeqt) col <- rep(col,ceiling(numeqt/length(col)))
     data$col <- ifelse(!is.na(data$outeq),col[data$outeq],NA)
     if(is.null(legend$legend)) legend$legend <- paste("Output",outeq)
-    legend$fill <- col[outeq]
+    if(is.null(legend$fill)) legend$fill <- col[outeq]
+    if(is.na(legend$fill[1])) legend$fill <- NULL
+    
     #color predicted if supplied
     if(!is.null(pred)){
       if(!missing(col.pred)){
@@ -253,7 +258,9 @@ plot.PMmatrix <- function(x,include,exclude,pred=NULL,icen="median",mult=1,outeq
         for(i in outeq){pred$col[pred$outeq==i] <- col.pred[i]}
       }else{
         for(i in outeq){pred$col[pred$outeq==i] <- col[i]}
-      }   
+      } 
+      #make sure pch is long enough
+      pch <- rep(pch,numeqt)
     }
     
   }
@@ -304,7 +311,7 @@ plot.PMmatrix <- function(x,include,exclude,pred=NULL,icen="median",mult=1,outeq
         for(j in outeq){
           tempdata <- subset(data,data$id==i & data$outeq==j)
           temppred <- pred[pred$id==i & pred$outeq==j,]
-          points(out~time,data=tempdata,type=jointype,pch=pch,col=tempdata$col,cex=cex,...)
+          points(out~time,data=tempdata,type=jointype,pch=pch[j],col=tempdata$col,cex=cex,...)
           lines(pred~time,data=temppred,col=temppred$col,...)
           if(ebar$plot){add.ebar(x=tempdata$time[data$evid==0],
                                  y=tempdata$out[data$evid==0],
@@ -366,7 +373,7 @@ plot.PMmatrix <- function(x,include,exclude,pred=NULL,icen="median",mult=1,outeq
         for(j in outeq){
           tempdata <- subset(data,data$id==i & data$outeq==j)
           temppred <- pred[pred$id==i & pred$outeq==j,]
-          points(out~time,data=tempdata,type=jointype,pch=pch,col=tempdata$col,cex=cex,...)
+          points(out~time,data=tempdata,type=jointype,pch=pch[j],col=tempdata$col,cex=cex,...)
           if(ebar$plot){add.ebar(x=data$time[data$id==i & data$evid==0 & data$outeq==j],
                                  y=data$out[data$id==i & data$evid==0 & data$outeq==j],
                                  upper=ebar$sd[ebar$id==i & ebar$outeq==j],col=subset(data$col,data$id==i & data$outeq==j))
@@ -427,7 +434,7 @@ plot.PMmatrix <- function(x,include,exclude,pred=NULL,icen="median",mult=1,outeq
           tempdata <- subset(data,data$id==i & data$outeq==j)
           temppred <- pred[pred$id==i & pred$outeq==j,]
           if(!ident) {
-            points(out~time,data=tempdata,type=jointype,pch=pch,col=tempdata$col,cex=cex,...)
+            points(out~time,data=tempdata,type=jointype,pch=pch[j],col=tempdata$col,cex=cex,...)
           } else {
             lines(out~time,data=tempdata,col=col,...)
             text(out~time,data=tempdata,labels=tempdata$id,col=col,cex=cex,...)
@@ -471,7 +478,7 @@ plot.PMmatrix <- function(x,include,exclude,pred=NULL,icen="median",mult=1,outeq
         for(j in outeq){
           tempdata <- subset(data,data$id==i & data$outeq==j)
           if(!ident) {
-            points(out~time,data=tempdata,type=jointype,pch=pch,col=tempdata$col,cex=cex,...)
+            points(out~time,data=tempdata,type=jointype,pch=pch[j],col=tempdata$col,cex=cex,...)
           } else {
             lines(out~time,data=tempdata,col=col,...)
             text(out~time,data=tempdata,labels=tempdata$id,col=col,cex=cex,...)

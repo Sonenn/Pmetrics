@@ -42,6 +42,7 @@ qgrowth <- function(sex=c("M","F","B"),percentile=c("5","10","25","50","75","90"
     sub2$percentile <- percentile
     final <- rbind(final,sub2)
   }
+  final <- final[-1,]
   if(length(sex)==2){
     final.nrow <- nrow(final)
     final.1 <- final[1:(final.nrow/2),]
@@ -49,6 +50,6 @@ qgrowth <- function(sex=c("M","F","B"),percentile=c("5","10","25","50","75","90"
     final.3 <- data.frame(age=final.1$age,wt=(final.1$wt+final.2$wt)/2,ht=(final.1$ht+final.2$ht)/2,sex="B",percentile=percentile)
     final <- final.3
   }
-  final <- final[-1,]
+
   return(final)  
 }

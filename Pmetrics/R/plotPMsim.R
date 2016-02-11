@@ -10,6 +10,9 @@
 #' @param log Boolean operator to plot in log-log space; the default is \code{False}
 #' @param probs Vector of quantiles to plot; if set to \code{NA}, all simulated profiles will be plotted,
 #' and numerical predictive checking will be suppressed
+#' @param binSize Width of binning interval for simulated concentrations, in time units, e.g. hours.  For example,
+#' a \code{binSize} of 0.5 will pull all simulated concentrations +/- 0.5 hours into the same time.  This is useful
+#' for plotting PMsim objects made during \code{\link{makeNPDE}}. The default is 0, i.e. no binning.
 #' @param outeq Which output equation to plot if more than 1
 #' @param pch Controls the plotting symbol for observations; default is NA which results in no symbol.
 #' Use 0 for open square, 1 for open circle, 2 for open triangle, 3 for cross, 4 for X, or 5 for a diamond.
@@ -61,7 +64,7 @@
 #' @seealso \code{\link{SIMparse}}, \code{\link{plot}}, \code{\link{par}}, \code{\link{axis}}
 #' @export
 
-plot.PMsim <- function(x,mult=1,log=T,probs=c(0.05,0.25,0.5,0.75,0.95),outeq=1,
+plot.PMsim <- function(x,mult=1,log=T,probs=c(0.05,0.25,0.5,0.75,0.95),binSize=0,outeq=1,
                        pch=NA,join=T,x.qlab=0.4,cex.qlab=0.8,pos.qlab=1,ci=0.95,
                        cex.lab=1.2,xlab="Time (h)",ylab="Output",xlim,ylim,obs,
                        grid,ocol="blue",add=F,out=NA,...){
@@ -71,6 +74,9 @@ plot.PMsim <- function(x,mult=1,log=T,probs=c(0.05,0.25,0.5,0.75,0.95),outeq=1,
     if(out$type=="eps") {setEPS();out$type <- "postscript"}
     if(length(out)>1) {do.call(out$type,args=out[-1])} else {do.call(out$type,list())}
   }
+  #get other args
+  otherArgs <- list(...)
+  
   
   #numerical check function
   NPsimInterp <- function(time,out,sim.sum,probs){
@@ -96,6 +102,7 @@ plot.PMsim <- function(x,mult=1,log=T,probs=c(0.05,0.25,0.5,0.75,0.95),outeq=1,
   }
   
   simout <- x
+  
   if(!inherits(simout,"PMsim")){stop("Use SIMparse() to make object of class Psim.\n")}
   if(!missing(obs)){
     if(!inherits(obs,"PMop")){stop("Use makeOP() to make object of class PMop.\n")}
@@ -126,19 +133,21 @@ plot.PMsim <- function(x,mult=1,log=T,probs=c(0.05,0.25,0.5,0.75,0.95),outeq=1,
   }
   if(join){jointype <- "o"} else {jointype <- "p"}
   
+  simout$obs$out <- simout$obs$out * mult
+  obs$obs <- obs$obs * mult
+  
   sim.out <- simout$obs
-  #   nout <- dim(sim.out)[1]
-  #   nsim <- dim(sim.out)[2]
-  #   nobs <- dim(sim.out)[3]
+  #bin times if requested
+  if(binSize > 0){
+    binnedTimes <- seq(floor(min(sim.out$time)),ceiling(max(sim.out$time)),binSize)
+    sim.out$time <- binnedTimes[.bincode(sim.out$time,binnedTimes)]
+  }
+  
   nout <- max(sim.out$outeq)
   nsim <- nrow(simout$parValues)
   times <- sort(unique(sim.out$time))
   nobs <- length(times)
   
-  #   times <- as.numeric(unlist(dimnames(sim.out)[3])) 
-  #   sim.out <- matrix(sim.out[outeq,,]*mult,ncol=nobs,byrow=T)
-  #   sim <- data.frame(id=rep(1:nsim,nobs),time=rep(times,each=nsim),out=c(t(sim.out)))
-  #   
   sim <- sim.out[sim.out$outeq==outeq,]
   
   if(!all(is.na(probs)) & nsim>=10){
@@ -160,11 +169,12 @@ plot.PMsim <- function(x,mult=1,log=T,probs=c(0.05,0.25,0.5,0.75,0.95),outeq=1,
                           lower.confint=unlist(sim.lconfint),upper.confint=unlist(sim.uconfint),quantile=rep(probs,nobs))
     row.names(sim.sum) <- 1:nrow(sim.sum)
     
-    if (missing(ylim)){ylim <- c(min(c(sim.sum$out,mult*obs$obs),na.rm=T),max(c(sim.sum$out,mult*obs$obs),na.rm=T))}
+    if (missing(ylim)){ylim <- c(min(c(sim.sum$out,obs$obs),na.rm=T),max(c(sim.sum$out,obs$obs),na.rm=T))}
     if (missing(xlim)){xlim <- c(min(c(sim.sum$time,obs$time),na.rm=T),max(c(sim.sum$time,obs$time),na.rm=T))}
     
     if(!add){
-      plot(out~time,data=sim.sum,type="n",log=logplot,xlab=xlab,ylab=ylab,cex.lab=cex.lab,xlim=xlim,ylim=ylim,yaxt=yaxt,...)
+      do.call("plot",args=c(list(out~time,data=sim.sum,type="n",log=logplot,xlab=xlab,ylab=ylab,cex.lab=cex.lab,xlim=xlim,ylim=ylim,yaxt=yaxt),otherArgs))
+      #plot(out~time,data=sim.sum,type="n",log=logplot,xlab=xlab,ylab=ylab,cex.lab=cex.lab,xlim=xlim,ylim=ylim,yaxt=yaxt,otherArgs2)
       if(missing(grid)){
         grid <- list(x=NA,y=NA)
       } else {
@@ -185,19 +195,35 @@ plot.PMsim <- function(x,mult=1,log=T,probs=c(0.05,0.25,0.5,0.75,0.95),outeq=1,
       abline(h=grid$y,lty=1,col="lightgray")
     }
     if(nsim<100) {cat("\nNote: Confidence intervals for simulation quantiles omitted when nsim < 100\n")}
-    for (i in probs){
+    
+    if(!is.na(probs[1])){
+      if("lwd" %in% names(otherArgs)){
+        lwd <- rep(otherArgs$lwd,length(probs))
+        otherArgs[[which(names(otherArgs)=="lwd")]] <- NULL
+      } else {lwd <- rep(1,length(probs))}
+      if("col" %in% names(otherArgs)){
+        col <- rep(otherArgs$col,length(probs))
+        otherArgs[[which(names(otherArgs)=="col")]] <- NULL
+      } else {col <- rep("gray50",length(probs))}
+    }
+    
+    for (i in 1:length(probs)){
       if(nsim>=100 & ci>0){
-        temp <- data.frame(x=c(sim.sum$time[sim.sum$quantile==i],rev(sim.sum$time[sim.sum$quantile==i])),
-                           y=c(sim.sum$lower.confint[sim.sum$quantile==i],rev(sim.sum$upper.confint[sim.sum$quantile==i])))
+        temp <- data.frame(x=c(sim.sum$time[sim.sum$quantile==probs[i]],rev(sim.sum$time[sim.sum$quantile==probs[i]])),
+                           y=c(sim.sum$lower.confint[sim.sum$quantile==probs[i]],rev(sim.sum$upper.confint[sim.sum$quantile==probs[i]])))
         polygon(x=temp$x,y=temp$y,col="lightgrey",border=NA)
       } 
-      points(out~time,subset(sim.sum,sim.sum$quantile==i),pch=pch,type=jointype,...)
+      #points(out~time,subset(sim.sum,sim.sum$quantile==probs[i]),pch=pch,lwd=lwd[i],col=col[i],otherArgs)
+      do.call("points",args=c(list(out~time,data=subset(sim.sum,sim.sum$quantile==probs[i]),pch=pch,lwd=lwd[i],col=col[i]),otherArgs))
+      
+      if(jointype=="o") do.call(lines,args=c(list(out~time,data=subset(sim.sum,sim.sum$quantile==probs[i]),pch=pch,lwd=lwd[i],col=col[i]),otherArgs))
+      
       hpos.text <- xlim[1] + x.qlab*(xlim[2]-xlim[1])
       if (!hpos.text %in% sim.sum$time){
         lower.time <- tail(sim.sum$time[sim.sum$time < hpos.text],1)
         upper.time <- head(sim.sum$time[sim.sum$time > hpos.text],1)
-        lower.sim <- sim.sum$out[sim.sum$time==lower.time & sim.sum$quantile==i]
-        upper.sim <- sim.sum$out[sim.sum$time==upper.time & sim.sum$quantile==i]
+        lower.sim <- sim.sum$out[sim.sum$time==lower.time & sim.sum$quantile==probs[i]]
+        upper.sim <- sim.sum$out[sim.sum$time==upper.time & sim.sum$quantile==probs[i]]
         if(!log){
           slope <- (upper.sim - lower.sim) / (upper.time - lower.time)
           vpos.text <- lower.sim + slope*(hpos.text-lower.time)
@@ -205,14 +231,19 @@ plot.PMsim <- function(x,mult=1,log=T,probs=c(0.05,0.25,0.5,0.75,0.95),outeq=1,
           slope <- (log10(upper.sim) - log10(lower.sim)) / (log10(upper.time) - log10(lower.time))
           vpos.text <- 10**(log10(lower.sim) + slope*(log10(hpos.text)-log10(lower.time)))                
         }
-      } else vpos.text <- sim.sum$out[sim.sum$time==hpos.text & sim.sum$quantile==i]
-      text(x=hpos.text,y=vpos.text,labels=i,cex=cex.qlab,pos=pos.qlab)
+      } else vpos.text <- sim.sum$out[sim.sum$time==hpos.text & sim.sum$quantile==probs[i]]
+      text(x=hpos.text,y=vpos.text,labels=probs[i],cex=cex.qlab,pos=pos.qlab)
     }
     
     if(!all(is.na(obs))){
-      points(mult*obs$obs~obs$time,type="p",col=ocol,...)
+      #       #bin times if requested
+      #       if(binSize > 0){
+      #         binnedTimes <- seq(floor(min(obs$time)),ceiling(max(obs$time)),binSize)
+      #         obs$time <- binnedTimes[.bincode(obs$time,binnedTimes)]
+      #       }
+      do.call("points",args=c(list(obs$obs~obs$time,col=ocol),otherArgs))
       for (i in 1:nrow(obs)){
-        obs$sim.quant[i] <- ifelse(is.na(obs$obs[i]),NA,NPsimInterp(obs$time[i],mult*obs$obs[i],sim.sum,probs=probs))
+        obs$sim.quant[i] <- ifelse(is.na(obs$obs[i]),NA,NPsimInterp(obs$time[i],obs$obs[i],sim.sum,probs=probs))
       }
       not.miss <- sum(!is.na(obs$sim.quant))
       npc <- data.frame(quantile=probs,prop.less=rep(NA,length(probs)),pval=rep(NA,length(probs)))
@@ -237,10 +268,10 @@ plot.PMsim <- function(x,mult=1,log=T,probs=c(0.05,0.25,0.5,0.75,0.95),outeq=1,
   } else {
     #probs are missing or nsim too low, plot all simulated profiles and skip numerical predictive check
     if(nsim<10) cat("\nQuantiles not calculated with fewer than 10 simulated profiles.\n")
-    if (missing(ylim)){ylim <- c(min(c(sim$out,mult*obs$obs),na.rm=T),max(c(sim$out,mult*obs$obs),na.rm=T))}
+    if (missing(ylim)){ylim <- c(min(c(sim$out,obs$obs),na.rm=T),max(c(sim$out,obs$obs),na.rm=T))}
     if (missing(xlim)){xlim <- c(min(c(sim$time,obs$time),na.rm=T),max(c(sim$time,obs$time),na.rm=T))}
     if(!add){
-      plot(out~time,data=sim,type="n",log=logplot,xlab=xlab,ylab=ylab,cex.lab=cex.lab,xlim=xlim,ylim=ylim,yaxt=yaxt,...)
+      do.call("plot",args=c(list(out~time,data=sim,type="n",log=logplot,xlab=xlab,ylab=ylab,cex.lab=cex.lab,xlim=xlim,ylim=ylim,yaxt=yaxt),otherArgs))
       if(missing(grid)){
         grid <- list(x=NA,y=NA)
       } else {
@@ -262,10 +293,10 @@ plot.PMsim <- function(x,mult=1,log=T,probs=c(0.05,0.25,0.5,0.75,0.95),outeq=1,
       
     } #end !add block
     for (i in unique(sim$id)){
-      points(out~time,subset(sim,sim$id==i),pch=pch,type=jointype,...)
+      do.call("points",args=c(list(out~time,subset(sim,sim$id==i),pch=pch,type=jointype),otherArgs))
     }
     
-    if(!all(is.na(obs))){points(mult*obs$obs~obs$time,type="p",col=ocol,...)}
+    if(!all(is.na(obs))){do.call("points",args=c(list(obs$obs~obs$time,type="p",col=ocol),otherArgs))}
     
     #close device if necessary
     if(inherits(out,"list")) dev.off()

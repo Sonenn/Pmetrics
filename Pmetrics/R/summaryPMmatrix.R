@@ -6,7 +6,9 @@
 #' @method summary PMmatrix
 #' @param x A PMmatrix object loaded by \code{\link{PMreadMatrix}} or \code{\link{PMload}}.
 #' @param formula Optional formula for specifying custom summaries.  See \code{\link{aggregate}}
-#' and \code{\link{formula}} for details on how to specify formulae in R.
+#' and \code{\link{formula}} for details on how to specify formulae in R. If, for example, the data contain
+#' a covariate for weight named 'wt', then to summarize the mean dose in mg/kg per subject specify 
+#' \code{formula=dose/wt~id, FUN=mean}.
 #' @param FUN The summary function to apply to \code{formula}, if specified.
 #' @param \dots Additional arguments to \code{FUN}, e.g. \code{na.rm=T} 
 #' @param include A vector of subject IDs to include in the summary, e.g. c(1:3,5,15)

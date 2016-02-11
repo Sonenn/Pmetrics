@@ -188,9 +188,6 @@ makePTA <- function(simdata,simlabels,targets,
       #get results into a format consistent with the others, i.e. matrix [ntarg,nsim]
       results[[simnum]] <- do.call(rbind,pta)
       if(ntarg==1) results[[simnum]] <- matrix(results[[simnum]],nrow=1)
-      
-      
-      
     }
     #auc above target
     if(target.type=="auc"){      

@@ -371,31 +371,54 @@ makeModel <- function(model="model.txt",data="data.csv",engine,write=T,silent=F)
   } 
   
   #find out if any are fixed to be positive only for IT2B
-  fixedpos <- grep("!",blocks$primVar)
-  if(length(fixedpos)>0) gsub("!","",blocks$primVar)
+  fixedpos <- grep("\\+",blocks$primVar)
+  if(length(fixedpos)>0) blocks$primVar <- gsub("\\+","",blocks$primVar)
   
+  #find out if any are to be fixed (constant) 
+  fixcon <- grep("!",blocks$primVar)
+  nofix <- length(fixcon)
+  if(nofix>0) blocks$primVar <- gsub("!","",blocks$primVar)
+  
+
   #get limits [a,b] on primary variables
   splitprimVar <- strsplit(blocks$primVar,sep)
   a <- as.numeric(unlist(lapply(splitprimVar,function(x) x[2])))
   b <- as.numeric(unlist(lapply(splitprimVar,function(x) x[3])))
-  #set parameter type: 1 for random, 0 for fixed, -1 for random but pos (IT2B only)
-  ptype <- c(1,0)[1+as.numeric(is.na(b))] 
-  #fixed variables
-  #nvar is number of random (estimated) parameters
-  #npvar is number of total parameters
-  #nofix is number of fixed parameters
-  nofix <- sum(as.numeric(is.na(b)))
-  nvar <- npvar - nofix
   
+  #set parameter type: 1 for random, 0 for constant, -1 for random but pos (IT2B only) and 2 for fixed random
+  ptype <- c(1,2)[1+as.numeric(is.na(b))] 
+  #if any fixed constant variables are present, set ptype to 0
+  if(nofix>0) ptype[fixcon] <- 0
+  
+  #for now, make all fixed constants for IT2B and SIM
+  if(engine$alg=="IT" | engine$alg=="SIM"){
+    ptype[ptype==2] <- 0
+    nofix <- sum(as.numeric(is.na(b)))
+  }
+  
+  #npvar is total number of parameters
+  #nvar is number of random (estimated) parameters
+  #nranfix is number of fixed (but unknown) parameters
+  #nofix is number of constant parameters
+  nranfix <- sum(as.numeric(is.na(b)))-nofix
+  nvar <- npvar - nofix - nranfix
+
   if((engine$alg=="IT" | engine$alg=="ERR") & length(fixedpos)>0) ptype[fixedpos] <- -1
-  #fixed variables
+  
   if(nofix>0){
-    valfix <- a[is.na(b)]
-    ab.df <- data.frame(a=a[!is.na(b)],b=b[!is.na(b)])
+    valfix <- a[which(ptype==0)]
   } else {
     valfix <- NA
-    ab.df <- data.frame(a=a,b=b)
   }
+  
+  if(nranfix>0){
+    valranfix <- a[which(ptype==2)]
+  } else {
+    valranfix <- NA
+  }
+  
+  ab.df <- data.frame(a=a[which(ptype==1)],b=b[which(ptype==1)])
+  
   
   #replace a,b with SIM limits argument if it is present
   if(engine$alg=="SIM" & !all(is.na(engine$limits))){  
@@ -408,6 +431,8 @@ makeModel <- function(model="model.txt",data="data.csv",engine,write=T,silent=F)
   } 
   
   if(nofix>0 & any(is.na(valfix))) return(list(status=-1,msg="One or more variables did not have any boundaries.\n"))
+  if(nranfix>0 & any(is.na(valranfix))) return(list(status=-1,msg="One or more variables did not have any boundaries.\n"))
+  
   #set grid point index for NPAG if not supplied
   if(engine$indpts==-99){
     indpts <- switch(nvar,1,1,3,4,6)
@@ -456,10 +481,15 @@ makeModel <- function(model="model.txt",data="data.csv",engine,write=T,silent=F)
   #get secondary variables and remove continuation lines beginning with "+"
   secVarNames <- gsub("[[:blank:]]","",unlist(lapply(strsplit(svardef,"="),function(x) x[1])))
   secVarNames[is.na(secVarNames)] <- ""
-  contLines <- grep("^\\+",secVarNames)
+  oldContLines <- grep("^\\+",secVarNames)
+  if(length(oldContLines>0)){
+    return(list(status=-1,msg="\nPlease replace '+' with '&' in all continuation lines.\n"))
+  }
+  contLines <- grep("^&",secVarNames)
+  
   if(length(contLines)>0){
     secVarNames <- secVarNames[-contLines]
-    svardef <- gsub("^\\+","",svardef) 
+    svardef <- gsub("^&","",svardef) 
   }
   
   #take out any extra declarations in diffeq to add to declarations in subroutine
@@ -514,10 +544,14 @@ makeModel <- function(model="model.txt",data="data.csv",engine,write=T,silent=F)
   modelnumeqt <- max(as.numeric(outputNumbers))
   if(modelnumeqt != engine$numeqt) return(list(status=-1,msg="\nThe number of output equations in the model file\ndoes not match the maximum value of outeq in your datafile.\n"))
   
-  #remove leading pluses from getfa, getix, gettlag if present
-  if(length(grep("^\\+",blocks$f)>0)) blocks$f <- gsub("^\\+","",blocks$f)
-  if(length(grep("^\\+",blocks$ini)>0)) blocks$ini <- gsub("^\\+","",blocks$ini)
-  if(length(grep("^\\+",blocks$lag)>0)) blocks$lag <- gsub("^\\+","",blocks$lag)
+  #remove leading ampersands from getfa, getix, gettlag if present
+  oldContLines <- grep("^\\+",c(blocks$f,blocks$ini,blocks$lag))
+  if(length(oldContLines>0)){
+    return(list(status=-1,msg="\nPlease replace '+' with '&' in all continuation lines.\n"))
+  }
+  if(length(grep("^&",blocks$f)>0)) blocks$f <- gsub("^&","",blocks$f)
+  if(length(grep("^&",blocks$ini)>0)) blocks$ini <- gsub("^&","",blocks$ini)
+  if(length(grep("^&",blocks$lag)>0)) blocks$lag <- gsub("^&","",blocks$lag)
   
   #variable declarations for fortran and make sure not >maxwidth characters
   if(secVarNames[1]!=""){
@@ -697,7 +731,7 @@ makeModel <- function(model="model.txt",data="data.csv",engine,write=T,silent=F)
   blocks <- lapply(blocks,prespace)
   
   fmod <- list(header=NA,diffeq=NA,output=NA,symbol=NA,getfa=NA,getix=NA,gettlag=NA,anal3=NA)
-  fmod$header <- c("C  TSTMULTM.FOR                          MAR, 2014",blank(2))
+  fmod$header <- c("C  TSTMULTN.FOR                          NOV, 2014",blank(2))
   fmod$diffeq <- c(  space(5,"SUBROUTINE DIFFEQ(NDIM,T,X,XP,RPAR,IPAR)"),
                      space(5,"IMPLICIT REAL*8(A-H,O-Z)"),                   
                      space(5,vardec),                  
@@ -706,6 +740,7 @@ makeModel <- function(model="model.txt",data="data.csv",engine,write=T,silent=F)
                      space(5,"COMMON /DESCR/ AGE,HEIGHT,ISEX,IETHFLG"),      
                      space(5,"COMMON /CNST2/ NPL,NUMEQT,NDRUG,NADD"),
                      space(5,"DIMENSION X(NDIM),XP(NDIM),P(32),R(37),B(20),CV(26),RATEIV(7)"),
+                     "!$omp Threadprivate(/PARAMD/,/INPUT/)  ",
                      blank(1),
                      unlist(lapply(diffstate,function(x) space(5,x))),
                      blank(1),
@@ -737,6 +772,7 @@ makeModel <- function(model="model.txt",data="data.csv",engine,write=T,silent=F)
                      space(5,"COMMON /CNST2/ NPL,NUMEQT,NDRUG,NADD"),
                      space(5,"PARAMETER(MAXNUMEQ=7)"),
                      space(5,"DIMENSION X(20),P(32),Y(MAXNUMEQ),R(37),B(20),CV(26)"),
+                     "!$omp Threadprivate(/PARAMD/,/INPUT/,/STATE/) ",
                      blank(2),
                      space(8,"DO I = 1, NADD"),       
                      space(10,"CV(I) = R(2*NDRUG + I)"),  
@@ -782,6 +818,7 @@ makeModel <- function(model="model.txt",data="data.csv",engine,write=T,silent=F)
                     space(5,"COMMON /CNST2/ NPL,NUMEQT,NDRUG,NADD"),
                     space(5,"COMMON /STATE/ X"),
                     space(5,"DIMENSION P(32),R(37),B(20),CV(26),FA(7),X(20)"),
+                    "!$omp Threadprivate(/PARAMD/,/INPUT/)  ",
                     blank(2),
                     space(8,"DO I = 1, NADD"),       
                     space(10,"CV(I) = R(2*NDRUG + I)"),  
@@ -809,6 +846,7 @@ makeModel <- function(model="model.txt",data="data.csv",engine,write=T,silent=F)
                     space(5,"COMMON /DESCR/ AGE,HEIGHT,ISEX,IETHFLG"),      
                     space(5,"COMMON /CNST2/ NPL,NUMEQT,NDRUG,NADD"),
                     space(5,"DIMENSION P(32),R(37),B(20),CV(26),X(20)"),
+                    "!$omp Threadprivate(/PARAMD/,/INPUT/)  ",
                     blank(2),
                     space(8,"DO I = 1, NADD"),       
                     space(10,"CV(I) = R(2*NDRUG + I)"),  
@@ -845,6 +883,7 @@ makeModel <- function(model="model.txt",data="data.csv",engine,write=T,silent=F)
                      space(5,"COMMON /CNST2/ NPL,NUMEQT,NDRUG,NADD"),
                      space(5,"COMMON /STATE/ X"),
                      space(5,"DIMENSION P(32),R(37),B(20),CV(26),TLAG(7),X(20)"),
+                     "!$omp Threadprivate(/PARAMD/,/INPUT/)  ",
                      blank(2),
                      space(8,"DO I = 1, NADD"),       
                      space(10,"CV(I) = R(2*NDRUG + I)"),  
@@ -873,6 +912,7 @@ makeModel <- function(model="model.txt",data="data.csv",engine,write=T,silent=F)
                     space(5,"COMMON /RATESV/ KE,KA,KCP,KPC,V"),      
                     space(5,"COMMON /CNST2/ NPL,NUMEQT,NDRUG,NADD"),
                     space(5,"DIMENSION X(20),P(32),R(37),B(20),CV(26)"),
+                    "!$omp Threadprivate(/PARAMD/,/INPUT/,/RATESV/)   ",
                     blank(2),
                     space(8,"DO I = 1, NADD"),       
                     space(10,"CV(I) = R(2*NDRUG + I)"),  
@@ -914,7 +954,8 @@ makeModel <- function(model="model.txt",data="data.csv",engine,write=T,silent=F)
                     space(8,"REAL*8 KE,KA,KCP,KPC"),             
                     space(8,"DIMENSION R(37),B(20)"),                      
                     space(8,"COMMON /RATESV/ KE,KA,KCP,KPC,V"),            
-                    space(8,"COMMON /INPUT/ R,B"),                       
+                    space(8,"COMMON /INPUT/ R,B"),     
+                    "!$omp Threadprivate(/RATESV/,/INPUT/)  ",
                     space(8,"IF(KE.NE.0.0D0) GO TO 10"),                   
                     space(8,"X2=T*R(1)+X2"),      
                     space(8,"RETURN"),                                    
@@ -928,7 +969,8 @@ makeModel <- function(model="model.txt",data="data.csv",engine,write=T,silent=F)
                     space(8,"REAL*8 KE,KA,KCP,KPC"),             
                     space(8,"COMMON /RATESV/ KE,KA,KCP,KPC,V"),            
                     space(8,"COMMON /INPUT/ R,B"),
-                    space(8,"DIMENSION R(37),B(20)"),                      
+                    space(8,"DIMENSION R(37),B(20)"),  
+                    "!$omp Threadprivate(/RATESV/,/INPUT/)  ",
                     space(8,"IF(KA.NE.KE) GO TO 30"),                      
                     space(8,"EKT=DEXP(-KE*T)"),   
                     space(8,"X2=(X2-R(1)/KE)*EKT+R(1)/KE+KE*X1*T*EKT"),   
@@ -952,7 +994,8 @@ makeModel <- function(model="model.txt",data="data.csv",engine,write=T,silent=F)
                     space(8,"REAL*8 KE,KA,KCP,KPC,L1,L2"),       
                     space(8,"COMMON /RATESV/ KE,KA,KCP,KPC,V"),            
                     space(8,"COMMON /INPUT/ R,B"),
-                    space(8,"DIMENSION EA(2,2),R(37),B(20)"),                                     
+                    space(8,"DIMENSION EA(2,2),R(37),B(20)"),   
+                    "!$omp Threadprivate(/RATESV/,/INPUT/)  ",
                     space(8,"T1=KE+KCP+KPC"),     
                     space(8,"T2=DSQRT(T1*T1-4.0D0*KE*KPC)"),               
                     space(8,"L1=0.5D0*(T1+T2)"),  
@@ -996,7 +1039,8 @@ makeModel <- function(model="model.txt",data="data.csv",engine,write=T,silent=F)
                     space(8,"REAL*8 KE,KA,KCP,KPC,L1,L2"),       
                     space(8,"COMMON /RATESV/ KE,KA,KCP,KPC,V"),            
                     space(8,"COMMON /INPUT/ R,B"),
-                    space(8,"DIMENSION EA(2,2),R(37),B(20),X(20)"),        
+                    space(8,"DIMENSION EA(2,2),R(37),B(20),X(20)"),     
+                    "!$omp Threadprivate(/RATESV/,/INPUT/)  ",
                     space(8,"T1=KE+KCP+KPC"),     
                     space(8,"T2=DSQRT(T1*T1-4.0D0*KE*KPC)"),               
                     space(8,"L1=0.5D0*(T1+T2)"),  
@@ -1075,7 +1119,7 @@ makeModel <- function(model="model.txt",data="data.csv",engine,write=T,silent=F)
   if(length(grep("ifort",fortran)>0)){syntaxcheck <- paste(fortran,"/syntax-only",modelFor) }
   if(length(grep("g95",fortran)>0)){syntaxcheck <- paste(fortran,"-fsyntax-only",modelFor) }
   
-    if(!is.na(syntaxcheck)){
+  if(!is.na(syntaxcheck)){
     if(OS==1 | OS==3){modelErr <- system(syntaxcheck,intern=T)
     } else {modelErr <- shell(syntaxcheck,intern=T)}
     if(length(attr(modelErr,"status"))>0) return(list(status=-1,msg="\nYou have Fortran syntax errors in your model statments, as detailed above.\n"))
@@ -1087,7 +1131,7 @@ makeModel <- function(model="model.txt",data="data.csv",engine,write=T,silent=F)
   #start instruction file creation if not SIM  
   if(engine$alg!="SIM" & write){
     instr <- vector("character")
-    if(engine$alg=="NP") {instr[getNext(instr)] <- "REM_BAK JUN_13"} else {instr[getNext(instr)] <- "REM_FRN JUL_13"} 
+    if(engine$alg=="NP") {instr[getNext(instr)] <- "REM_BAK OCT_15"} else {instr[getNext(instr)] <- "REM_FRN JUL_13"} 
     if(length(engine$salt>1)) engine$salt <- paste(engine$salt,collapse="     ")
     instr[getNext(instr)] <- " IVERIFY: 1 --> YES; 0 --> NO"
     instr[getNext(instr)] <- 0
@@ -1111,6 +1155,14 @@ makeModel <- function(model="model.txt",data="data.csv",engine,write=T,silent=F)
     if(any(ptype==0)) {instr[getNext(instr)] <- paste(blocks$primVar[which(ptype==0)],collapse="\n")}
     instr[getNext(instr)] <- " VALFIX ARRAY IF NOFIX > 0"
     if(length(valfix)>1){instr[getNext(instr)] <- paste(valfix,collapse="    ")} else {instr[getNext(instr)] <- valfix}
+    if(engine$alg=="NP"){
+      instr[getNext(instr)] <- "NRANFIX"
+      instr[getNext(instr)] <- nranfix
+      instr[getNext(instr)] <- " PARRANFIX(I),I=1,NRANFIX, IF NRANFIX > 0"
+      if(any(ptype==2)) {instr[getNext(instr)] <- paste(blocks$primVar[which(ptype==2)],collapse="\n")}
+      instr[getNext(instr)] <- " RANFIXEST ARRAY IF NRANFIX > 0"
+      if(length(valranfix)>1){instr[getNext(instr)] <- paste(valranfix,collapse="    ")} else {instr[getNext(instr)] <- valranfix}
+    } 
     instr[getNext(instr)] <- " O.D.E. TOLERANCE"
     instr[getNext(instr)] <- 10**engine$ode
     instr[getNext(instr)] <- " IFORMT"
@@ -1168,7 +1220,7 @@ makeModel <- function(model="model.txt",data="data.csv",engine,write=T,silent=F)
       instr[getNext(instr)] <- engine$idelta
       instr[getNext(instr)] <- " XMIC"
       instr[getNext(instr)] <- engine$xmic
-      instr[getNext(instr)] <- " ICENT"
+      instr[getNext(instr)] <- " ICENT, WHICH IS NOW IRRELEVANT"
       instr[getNext(instr)] <- switch(engine$icen,mean=1,median=2,mode=3,2)
       instr[getNext(instr)] <- " AUCINT"
       instr[getNext(instr)] <- engine$aucint
@@ -1227,7 +1279,7 @@ makeModel <- function(model="model.txt",data="data.csv",engine,write=T,silent=F)
     cat("\n\n")
     
   } #end if silent
-  return(list(status=1,modelFor=modelFor,ptype=ptype,ctype=ctype,nvar=nvar,nofix=nofix,valfix=valfix,ab=ab.df,indpts=indpts,asserr=asserr,blocks=blocks))
+  return(list(status=1,modelFor=modelFor,N=N,ptype=ptype,ctype=ctype,nvar=nvar,nofix=nofix,valfix=valfix,ab=ab.df,indpts=indpts,asserr=asserr,blocks=blocks))
 } #end makeModel function
 
 
@@ -1407,12 +1459,15 @@ getOS <- function(){
 
 # MMopt functions ---------------------------------------------------------
 
-mmopt1<-function(Mu,time,pH,cassay,nsamp,nsubs,nout){
-  # MMOPT1.R
+wmmopt1<-function(Mu,time,pH,cassay,nsamp,nsubs,nout,C){
+  # WMMOPT1.M
   #
   # This routine computes the MMOPT 1,2,3 and 4-sample optimal sample designs
+  # taking into account an additional weighting matrix C
   #
-  # Written by David S. Bayard, October 14, 2013 and Alona Kryschencko.
+  # Note: Created from mmopt1.m in order to incorporate control weighting
+  #
+  # Written by David S. Bayard, February 22,2015 and Alona Kryshchenko, and Michael Neely
   #
   # INPUTS
   # --------
@@ -1425,19 +1480,34 @@ mmopt1<-function(Mu,time,pH,cassay,nsamp,nsubs,nout){
   # cassay - 4x1, coefficients in assay polynomial:
   #        1-sigma assay error = c0+c1*y+c2*y^2+c3*y^3
   # nsamp - desired # of samples in experiment design
-  # Note: All MMOPT designs are computed having less than or equal to nsamp samples
+  # C    - (nsubs)x(nsubs), Matrix of elements (c_ij} where c_ij is cost incurred from
+  #        mistaking i'th support point (truth) to be j'th support point
+  #        (wrong classification). Intuitively, you are giving jth subject's 
+  #         dose with response a_j to
+  #         ith subject with response a_ij, so that the control cost is
+  #              c_ij=w_ij*(a_ij-a_j)^2,  where w_ij can be an arbitrary
+  #              additional weighting function of i and j
+  #         Key property: c_ii=0 for 1=1,...,nsubs, i.e., there is no cost for 
+  #           getting classification correct
+  #                      
+  # Note: All MMOPT designs are computed having less than or equal to nsamp
+  # samples
   #
   # OUTPUTS
   # --------
   # optsamp - 4x4, optimal samples times by column
   #             @ Column i contains the optimal design for i samples
   #             @ "-1" indicates "not applicable"
-  # brisk   - 4x1, Bayes risk
-  #            brisk(i) is the Bayes Risk associated with 
+  # brisk_cob   - 4x1, Bayes risk cost overbound
+  #            brisk_cob(i) is the Bayes Risk cost overbound associated with 
   #            using the optimal design having i samples
   #                "-1" indicates "not applicable"
-  # optindex - 4x4, indices of optimal sample tims from time=(nt)x1
-  #
+  # optindex - 4x4, indices of optimal sample times from time=(nt)x1
+  # Cbar - (nsub)x(nsub), matrix of control overbound error weights {cbar_ij}
+  #    used in the weighted MMOPT optimization (i.e., where cbar_ij=max(cij,cji)
+  #       Note: Cbar is not the same as C in general
+  # 
+  
   # -------------------------------------
   # Initialize all entries with -1 
   optsamp <- matrix(-1,4,4);
@@ -1451,6 +1521,10 @@ mmopt1<-function(Mu,time,pH,cassay,nsamp,nsubs,nout){
   Perror2 <- -1
   Perror3 <- -1
   Perror4 <- -1
+  Perror1_min <- -1
+  Perror2_min <- -1
+  Perror3_min <- -1
+  Perror4_min <- -1
   # -------------------------------
   # Extract needed quantities
   
@@ -1467,7 +1541,8 @@ mmopt1<-function(Mu,time,pH,cassay,nsamp,nsubs,nout){
   kallijn<-kall_ijn(Mu,c0,c1,c2,c3,nsubs,nout);
   Kall<-kallijn$Kall
   skall<-kallijn$skall
-  
+  # Compute Cbar matrix for control weighting overbound
+  Cbar<-cbar_make1(C)
   # ------------------------------
   # SINGLE SAMPLE OPTIMIZATION
   if (nsamp==1){
@@ -1478,13 +1553,15 @@ mmopt1<-function(Mu,time,pH,cassay,nsamp,nsubs,nout){
     #
     for (n1 in 1:nout){       
       nvec<-n1;
-      Perror1<-perror1(pH,Kall,nvec);
+      Perror1<-perrorc1(pH,Kall,nvec,Cbar);
       # keep running optimal
       if (n1==1){Perror1_min<-Perror1; nopt1<-n1;}
       if (Perror1 < Perror1_min){Perror1_min<-Perror1; nopt1<-n1;}
       # Store Perror
       # Perror1_stor(n1)=Perror1;
     }
+    Perror2<-Perror2_min
+    Perror3<-Perror3_min
     #111111111111111111111111111111111111111111111111111111111111111
   } # endif
   
@@ -1501,7 +1578,7 @@ mmopt1<-function(Mu,time,pH,cassay,nsamp,nsubs,nout){
     for (n1 in 1:nout){       
       for (n2 in n1:nout){
         nvec<-c(n1,n2);
-        Perror2<-perror1(pH,Kall,nvec);
+        Perror2<-perrorc1(pH,Kall,nvec,Cbar);
         # keep running optimal
         if ((n1==1)&&(n2==1)){ Perror2_min<-Perror2; nopt2<-c(n1,n2); }
         if (Perror2 < Perror2_min){ Perror2_min<-Perror2; nopt2<-c(n1,n2); }
@@ -1509,6 +1586,8 @@ mmopt1<-function(Mu,time,pH,cassay,nsamp,nsubs,nout){
         #          Perror2_stor(n1,n2)=Perror2;
       }
     }
+    Perror1<-Perror1_min
+    Perror3<-Perror3_min
     #222222222222222222222222222222222222222222222222222222222222222
   } # endif
   #
@@ -1529,7 +1608,7 @@ mmopt1<-function(Mu,time,pH,cassay,nsamp,nsubs,nout){
       for (n2 in n1:nout){
         for (n3 in n2:nout){
           nvec<-c(n1,n2,n3);
-          Perror3<-perror1(pH,Kall,nvec);
+          Perror3<-perrorc1(pH,Kall,nvec,Cbar);
           # keep running optimal
           if ((n1==1)&&(n2==1)&&(n3==1)){ Perror3_min<-Perror3; nopt3<-c(n1,n2,n3); }
           if (Perror3 < Perror3_min){ Perror3_min<-Perror3; nopt3<-c(n1,n2,n3); }
@@ -1539,6 +1618,8 @@ mmopt1<-function(Mu,time,pH,cassay,nsamp,nsubs,nout){
       }
     }
     close(pb)
+    Perror1<-Perror1_min
+    Perror2<-Perror2_min
     #333333333333333333333333333333333333333333333333333333333333333
   }  # endif
   #
@@ -1558,7 +1639,7 @@ mmopt1<-function(Mu,time,pH,cassay,nsamp,nsubs,nout){
         for (n3 in n2:nout){
           for (n4 in n3:nout){
             nvec<-c(n1,n2,n3,n4);
-            Perror4<-perror1(pH,Kall,nvec);
+            Perror4<-perrorc1(pH,Kall,nvec,Cbar);
             # keep running optimal
             if ((n1==1)&&(n2==1)&&(n3==1)&&(n4==1)){ Perror4_min<-Perror4; nopt4<-c(n1,n2,n3,n4); }
             if (Perror4 < Perror4_min){ Perror4_min<-Perror4; nopt4<-c(n1,n2,n3,n4); } 
@@ -1569,6 +1650,9 @@ mmopt1<-function(Mu,time,pH,cassay,nsamp,nsubs,nout){
       }
     }
     close(pb)
+    Perror1<-Perror1_min
+    Perror2<-Perror2_min
+    Perror3<-Perror3_min
     #444444444444444444444444444444444444444444444444444444444444444
   } # endif
   # -----------------------------------
@@ -1583,8 +1667,8 @@ mmopt1<-function(Mu,time,pH,cassay,nsamp,nsubs,nout){
   optindex[1:3,3]<-nopt3;
   optindex[1:4,4]<-nopt4;
   # --
-  brisk<-c(Perror1, Perror2, Perror3, Perror4);
-  return(list(optsamp=optsamp,brisk=brisk,optindex=optindex))
+  brisk_cob<-c(Perror1, Perror2, Perror3, Perror4);
+  return(list(optsamp=optsamp,brisk_cob=brisk_cob,optindex=optindex,Cbar=Cbar))
 }
 
 kall_ijn<-function(Mu,c0,c1,c2,c3,nsubs,nout){
@@ -1698,8 +1782,8 @@ kmat_ijn<-function(Mu,n,c0,c1,c2,c3,nsubs,nout){
   return(Kn)
 } 
 
-perror1<- function(pH,Kall,nvec){
-  # PERROR1.R
+perrorc1<- function(pH,Kall,nvec,Cbar){
+  # PERRORC1.R
   #
   # Routine to compute Bayes Risk Overbound, evaluated on 
   # vector of candidate sample times specified in "nvec"
@@ -1713,6 +1797,9 @@ perror1<- function(pH,Kall,nvec){
   #                    n2
   #                    :
   #                    nsamp]
+  # Cbar - (nsub)x(nsub), matrix of control overbound error weights {cbar_ij}
+  #    where cbar_ij=max(cij,cji)
+  #
   # OUTPUTS
   # -------
   # Perror - MMopt upper bound on Bayes Risk, evaluated on the 
@@ -1752,9 +1839,45 @@ perror1<- function(pH,Kall,nvec){
   # (note- Lars' formulat has sum over the upper half of
   # the symmetric matrix ExpKallsum0, while I am summing over ENTIRE matrix, hence the
   # factor of 1/2 below:
-  Perror<-.5*t(pH5)%*%ExpKallsum0%*%pH5;
+  Perror<-.5*t(pH5)%*%(ExpKallsum0*Cbar)%*%pH5;
   return(Perror)
 }
+cbar_make1<-function(C){
+  # CBAR_MAKE1.R
+  #
+  # Routine to make Cbar matrix from C matrix
+  # used for MMopt control-relevant expt design
+  #
+  # INPUTS
+  # ------
+  # C    - (nsubs)x(nsubs), Matrix of elements (c_ij) where c_ij is cost incurred from
+  #        mistaking i'th support point (truth) to be j'th support point
+  #        (wrong classification). Specifically, you are giving the jth dose
+  #        dose_j to the ith subject, giving response a_ij when the desired
+  #        response is a_j. Hence, elements of C are given by the formula:
+  #         c_ij=w_ij*(a_ij-a_j)^2
+  #         Key property: c_ii=0 for 1=1,...,nsubs
+  #
+  # OUTPUTS
+  # ------
+  # Cbar - (nsubs)x(nsubs), Matrix of elements (cbar_ij} where 
+  #               cbar_ij=max(c_ij,c_ji) 
+  #       and c_ij is an element of the C matrix defined next
+  # -------------------
+  #
+  nsubs<-dim(C)[1];
+  msubs<-dim(C)[2];
+  Cbar<-matrix(0,nsubs,nsubs);
+  
+  #
+  for (i in 1:nsubs){
+    for (j in 1:nsubs){
+      Cbar[i,j]<-max(C[i,j],C[j,i]); #     Definition: cbar_ij=max(c_ij,c_ji)  
+    }
+  }
+  return(Cbar)
+}
+
 
 
 

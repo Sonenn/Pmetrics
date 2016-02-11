@@ -3,7 +3,24 @@
                    include,exclude,ode,tol,salt,cycles,
                    indpts,icen,aucint,
                    idelta,prior,xdev,search,
-                   auto,intern,silent,overwrite,nocheck){
+                   auto,intern,silent,overwrite,nocheck,parallel){
+  
+  
+  #make new ouput directory
+  if(is.null(run)){
+    olddir <- list.dirs(recursive=F)
+    olddir <- olddir[grep("^\\./[[:digit:]]+",olddir)]
+    olddir <- sub("^\\./","",olddir)
+    if(length(olddir)>0){
+      newdir <- as.character(max(as.numeric(olddir))+1)
+    } else {newdir <- "1"}
+  } else {
+    if(!is.numeric(run)) {endNicely("'run' must be numeric.\n")} else {newdir <- as.character(run)}
+  }
+  
+  if(file.exists(newdir)){
+    if(overwrite) {unlink(newdir,recursive=T)} else {endNicely(paste("\n",newdir," exists already.  Set overwrite=T to overwrite.\n"))}
+  }
   
   #check for files
   #copy model file if available
@@ -159,6 +176,17 @@
     instr <- "instr.inx"
   }
   
+  #if parallel not specified, choose serial for algebraic/exact or parallel for ODE
+  if(is.na(parallel)){
+    parallel <- c(T,F)[1+as.numeric(trans$N<=0)]
+  }
+  
+  #if parallel is true and in 32-bit, choose serial and warn
+  if(parallel & get("PmetricsBit",envir=PMenv)=="32"){
+    parallel <- F
+    cat("\nNote: Parallel processing is not available for 32-bit systems.\n")
+  }
+  
   OS <- getOS()
   
   fortSource <- switch(OS,"~/.config/Pmetrics/compiledFortran",
@@ -168,24 +196,12 @@
     PMbuild()
   }
   compiler <- PMFortranConfig()
-  if(is.null(compiler)) endNicely(paste("\nExecute ",type," run after gfortran is installed.\n",sep=""),
+  #check if gfortran and choose serial if not
+  if(length(compiler)==1){
+    parallel <- F
+  }
+  if(is.null(compiler)) endNicely(paste("\nExecute ",type," run after a fortran compiler is installed.\n",sep=""),
                                   model,data)
-  
-  #make new ouput directory
-  if(is.null(run)){
-    olddir <- list.dirs(recursive=F)
-    olddir <- olddir[grep("^\\./[[:digit:]]+",olddir)]
-    olddir <- sub("^\\./","",olddir)
-    if(length(olddir)>0){
-      newdir <- as.character(max(as.numeric(olddir))+1)
-    } else {newdir <- "1"}
-  } else {
-    if(!is.numeric(run)) {endNicely("'run' must be numeric.\n",model,data)} else {newdir <- as.character(run)}
-  }
-  
-  if(file.exists(newdir)){
-    if(overwrite) {unlink(newdir,recursive=T)} else {endNicely(paste("\n",newdir," exists already.  Set overwrite=T to overwrite.\n",model,data))}
-  }
   
   #substitution string for directory separator according to OS  
   rep <- c("/","\\\\","/")[OS]
@@ -193,11 +209,12 @@
   #change units of ODE tolerance to linear from log
   ode <- c(0,10**ode)
   
-  #generate the names of the permanent modules  
+  #generate the names of the permanent modules
+  if(parallel){prefix <- "p"} else {prefix <- "s"} #add the correct switch for NPAG engine, always serial for IT2B and ERR
   prepfiles <- shQuote(normalizePath(list.files(fortSource,
-                                                pattern=switch(type,NPAG="NPprep",IT2B="ITprep",ERR="ITprep"),full.names=T)))
+                                                pattern=switch(type,NPAG="sNPprep",IT2B="sITprep",ERR="sITprep"),full.names=T)))
   enginefiles <- shQuote(normalizePath(list.files(fortSource,
-                                                  pattern=switch(type,NPAG="NPeng",IT2B="ITeng",ERR="ITerr"),full.names=T)))
+                                                  pattern=switch(type,NPAG=paste(prefix,"NPeng",sep=""),IT2B="sITeng",ERR="sITerr"),full.names=T)))
   
   #generate names of files that will be created
   prepFileName <- switch(type,NPAG="np_prep",IT2B="it_prep",ERR="err_prep")
@@ -210,9 +227,9 @@
   if(type=="ERR") {outlist <- "ASS*"}
   
   #generate the compile statements  
-  prepcompile <- sub("<exec>",prepFileName,compiler)
+  prepcompile <- sub("<exec>",prepFileName,compiler[1])
   prepcompile <- sub("<files>",prepfiles,prepcompile,fixed=T)
-  enginecompile <- sub("<exec>",runFileName,compiler)
+  enginecompile <- sub("<exec>",runFileName,compiler[1+as.numeric(parallel)])
   enginecompile <- sub("<files>",enginefiles,enginecompile,fixed=T)
   #now substitute the file separator for inclusion in the batch file
   prepfiles <- gsub("/",rep,prepfiles)
@@ -238,6 +255,10 @@
     workdir <- gsub("/",rep,getwd())
     #change working directory
     PMscript[getNext(PMscript)] <- paste("cd",shQuote(workdir))
+    #start timer
+    PMscript[getNext(PMscript)] <- c("echo Unix>time.txt","echo Windows>time.txt","echo Linux>time.txt")[OS]
+    PMscript[getNext(PMscript)] <- c("date +%s>>time.txt","echo %time%>>time.txt","date +%s>>time.txt")[OS]
+    
     if (!auto){
       #manual run of prep program
       PMscript[getNext(PMscript)] <- c(paste("./",prepFileName," MacOSX",sep=""),
@@ -325,7 +346,7 @@
     
     if (instr!=-99){
       PMscript[getNext(PMscript)] <- paste(c("mv ","move ","mv ")[OS],instr," ",newdir,c("/etc","\\etc","/etc")[OS],sep="")
-      PMscript[getNext(PMscript)] <- paste(c("mv ","move ","mv ")[OS],"log.txt ",newdir,c("/outputs","\\outputs","/outputs")[OS],sep="")
+      if(OS!=2) {PMscript[getNext(PMscript)] <- paste(c("mv ","","mv ")[OS],"log.txt ",newdir,c("/outputs","","/outputs")[OS],sep="")}
       PMscript[getNext(PMscript)] <- paste(c("mv ","move ","mv ")[OS],"PMcontrol ",newdir,c("/etc","\\etc","/etc")[OS],sep="")
       
     }
@@ -364,13 +385,19 @@
                  paste(workdir,"\\",newdir,"\\outputs",sep=""),
                  paste(workdir,"/",newdir,"/outputs",sep=""))[OS]
     
+    #end timer and move file to outputs
+    PMscript[getNext(PMscript)] <- c("date +%s >> time.txt","echo %time% >> time.txt","date +%s >> time.txt")[OS]
+    PMscript[getNext(PMscript)] <- paste(c("mv ","move ","mv ")[OS],"time.txt ",newdir,c("/outputs","\\outputs","/outputs")[OS],sep="")
+    
+    
     #close the error loop    
-    PMscript[getNext(PMscript)] <- c("if ! $error ; then ", "if %error% == 0 (","if ! $error ; then ")[OS]
+    PMscript[getNext(PMscript)] <- c("if ! $error ; then ", "if %error% == 0 (","if ! $error ; then ")[OS]   
+    
     
     #call report script and then open HTML file
-    PMscript[getNext(PMscript)] <- c(paste(normalizePath(R.home("bin"),winslash="/"),"/Rscript ",shQuote(reportscript)," ",shQuote(outpath)," ",icen,sep=""),
-                                     paste(shQuote(paste(gsub("/",rep,normalizePath(R.home("bin"),winslash="/")),"\\Rscript",sep=""))," ",shQuote(reportscript)," ",shQuote(outpath)," ",icen,sep=""),
-                                     paste(normalizePath(R.home("bin"),winslash="/"),"/Rscript ",shQuote(reportscript)," ",shQuote(outpath)," ",icen,sep=""))[OS]
+    PMscript[getNext(PMscript)] <- c(paste(normalizePath(R.home("bin"),winslash="/"),"/Rscript ",shQuote(reportscript)," ",shQuote(outpath)," ",icen," ",parallel,sep=""),
+                                     paste(shQuote(paste(gsub("/",rep,normalizePath(R.home("bin"),winslash="/")),"\\Rscript",sep=""))," ",shQuote(reportscript)," ",shQuote(outpath)," ",icen," ",parallel,sep=""),
+                                     paste(normalizePath(R.home("bin"),winslash="/"),"/Rscript ",shQuote(reportscript)," ",shQuote(outpath)," ",icen," ",parallel,sep=""))[OS]
     PMscript[getNext(PMscript)] <- c(paste("open ",shQuote(paste(gsub("/",rep,outpath),"/",type,"report.html",sep=""))," ; fi",sep=""),
                                      paste("start ",shQuote(paste(type,"Report"))," ",shQuote(paste(gsub("/",rep,outpath),"\\",type,"report.html",sep="")),")",sep=""),
                                      paste("xdg-open ",shQuote(paste(gsub("/",rep,outpath),"/",type,"report.html",sep=""))," ; fi",sep=""))[OS]
@@ -445,7 +472,11 @@
     }  
     
     # RUN  engine
+  
     if(OS==1 | OS==3){
+      timeFile <- file("time.txt",open="a")
+      writeLines(c("Unix","","Linux")[OS],timeFile)
+      writeLines(as.character(proc.time()[3]),timeFile)
       system("echo 1 > extnum")
       system("echo go > go")
       system(paste(enginecompile,drivFileName,sep=" "))
@@ -544,8 +575,14 @@
     file.remove(Sys.glob("*_prep*"))
     file.remove(Sys.glob("*_run*"))
     
+    #end time
+    writeLines(as.character(proc.time()[3]),timeFile)
+    close(timeFile)
+    file.copy(from="time.txt",to=paste(newdir,"/outputs",sep=""))
+    file.remove("time.txt")
+    
     #make report
-    if(type=="NPAG" | type=="IT2B") {PMreport(paste(workdir,newdir,"outputs",sep="/"),icen=icen,type=type)}
+    if(type=="NPAG" | type=="IT2B") {PMreport(paste(workdir,newdir,"outputs",sep="/"),icen=icen,type=type,parallel=parallel)}
     if(type=="ERR") {ERRreport(paste(workdir,newdir,"outputs",sep="/"),icen=icen,type=type)}
     
     #final clean up

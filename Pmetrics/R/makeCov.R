@@ -6,16 +6,16 @@
 #' @title Extract covariate data
 #' @param data A suitable data object of the \emph{NPAG} or \emph{IT2B} class (see \code{\link{NPparse}} or \code{\link{ITparse}}).
 #' @return The output of \code{makeCov} is a dataframe of class \emph{PMcov},
-#' which has \emph{nsub} rows and the following columns:
+#' which has the following columns:
 #' \item{id }{Subject identification}
 #' \item{time }{Times of covariate observations}
 #' \item{covnames... }{Columns with each covariate observations in the dataset for each subject and \code{time} }
 #' \item{parnames... }{Columns with each parameter in the model and the \code{icen} summary
 #' for each subject, replicated as necessary for covariate observation times and duplicated for Bayesian 
 #' parameter means and medians }
-#' A plot method exists in \code{\link{plot}} for \emph{makeCov} objects.
+#' \item{icen}{The type of summarized Bayesian posterior individual parameter values: mean or median.}
 #' @author Michael Neely
-#' @seealso \code{\link{NPparse}}, \code{\link{ITparse}}, \code{\link{plot.PMcov}}
+#' @seealso \code{\link{NPparse}}, \code{\link{ITparse}}, \code{\link{plot.PMcov}}, \code{\link{summary.PMcov}}
 #' @examples
 #' data(PMex1)
 #' cov <- makeCov(NPdata.1)

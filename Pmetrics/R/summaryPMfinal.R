@@ -1,21 +1,21 @@
 #' Generates summary statistics of final population model parameters.
 #'
 #' For NPAG runs, this function will generate weighted medians as central tendencies of the
-#' population points with a 95% confidence interval (95% CI) around the median, 
+#' population points with a 95\% confidence interval (95\% CI) around the median, 
 #' and the median absolute weighted deviation (MAWD) from the median as a measure 
-#' of the variance, with its 95% CI.  These estimates correspond to weighted mean, 
-#' 95% CI of the mean, variance, and 95% CI of the variance, respectively, for a 
+#' of the variance, with its 95\% CI.  These estimates correspond to weighted mean, 
+#' 95\% CI of the mean, variance, and 95\% CI of the variance, respectively, for a 
 #' sample from a normal distribution.  To estimate these non-parametric summaries, 
-#' the function uses a Monte Carlo simulation approach, creating  npoint x 10,000 samples 
+#' the function uses a Monte Carlo simulation approach, creating  1000 x npoint samples 
 #' with replacement from the weighted marginal distribution of each parameter, 
 #' where npoint is the number of support points in the model.  As an example, 
 #' if there are 100 support points, npoint = 100, and for Ka, there will be 
-#' 100 sets of 1,000 samples drawn from the weighted marginal distribution of the 
-#' values for Ka.  For each of the npoint sets of 1,000, the median and MAWD are 
+#' 1000 sets of 100 samples drawn from the weighted marginal distribution of the 
+#' values for Ka.  For each of the 1,000 sets of npoint values, the median and MAWD are 
 #' calculated, with MAWD equal to the median absolute difference between each point 
 #' and the median of that set.  The output is npoint estimates of the weighted median 
 #' and npoint estimates of the MAWD for each parameter, from which the median, 2.5th, 
-#' and 97.5th percentiles can be found as point estimates and 95% confidence 
+#' and 97.5th percentiles can be found as point estimates and 95\% confidence 
 #' interval limits, respectively, of both the weighted median and MAWD.
 #' 
 #' For IT2B runs, the function will return the mean and variance of each parameter,
@@ -74,6 +74,7 @@ summary.PMfinal <- function(x,lower=0.025,upper=0.975){
     }
     
     mcsim <- function(x,prob){
+      set.seed(17)
       sim <- apply(matrix(sample(x,rep=T,10^3*length(x),prob=prob),nrow=10^3),1,medMAD)
       ciMed <- quantile(sapply(sim,function(x) x[[1]]),c(lower,0.5,upper))
       ciMAD <- quantile(sapply(sim,function(x) x[[2]]),c(lower,0.5,upper))
@@ -84,6 +85,12 @@ summary.PMfinal <- function(x,lower=0.025,upper=0.975){
     } else {popPoints <- x}
     
     nvar <- ncol(popPoints) - 1
+    
+    #trick it if there is only one point
+    if(nrow(popPoints)==1){
+      popPoints <- rbind(popPoints,popPoints)
+      popPoints$prob <- c(0.5,0.5)
+    }
     
     sumstat <- apply(popPoints[,1:nvar],2,function(x) mcsim(x,popPoints[,nvar+1]))
     

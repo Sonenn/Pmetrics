@@ -24,7 +24,6 @@
   if(length(grep("64-bit",utils::sessionInfo()))>0) {assign("PmetricsBit","64",envir=PMenv)} else {assign("PmetricsBit","32",envir=PMenv)}
   
   #set current number of fixed columns and their names in data file
-  
   assign("fixedColNames",
          c("id","evid","time","dur","dose","addl",
            "ii","input","out","outeq","c0","c1","c2","c3"),
@@ -32,10 +31,9 @@
   )
   assign("nfixed",14,envir=PMenv)
   
-  #restore user defaults
-  if(length(system.file(package="Defaults"))==1){PMreadDefaults()}
-  
-  
+  #restore user defaults - deprecated
+  #if(length(system.file(package="Defaults"))==1){PMreadDefaults()}
+
   
 }
 
@@ -87,6 +85,9 @@
   if(needToBuild){
     packageStartupMessage("\nCRITICAL: Pmetrics needs to compile fortran modules.  You must run PMbuild().\n")
   }
+  
+  #set user options for the session
+  setPMoptions()
   
 }
 

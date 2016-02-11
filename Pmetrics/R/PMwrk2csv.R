@@ -25,6 +25,12 @@ PMwrk2csv <- function(prefix,ext=NULL,nsub){
     fmtStr <- paste("%0",8-nchar(prefix),"d",sep="")
     filename <- paste(prefix,sprintf(fmtStr,i),ext,sep="")
     data <- readLines(filename)
+    #clean up leading spaces and trailing CRs
+    
+    data <- gsub("^[[:blank:]]+","",data)
+    data <- gsub("[[:space:]]+$","",data)
+    
+    
     if (length(grep("RATES",data)>0)){oldFlag <- T}
     idLine <- grep("CHART NUMBER",data)
     idMatch <- regexpr("[[:digit:]]+",data[idLine])
@@ -33,7 +39,7 @@ PMwrk2csv <- function(prefix,ext=NULL,nsub){
     id <- id2
     if (oldFlag){
       age <- as.numeric(data[8])
-      sex <- ifelse(data[9]=="M",0,1)
+      male <- ifelse(data[9]=="M",1,0)
       height <- as.numeric(data[10])
       dosegap <- 5
       ratesLine <- grep("RATES",data)
@@ -67,7 +73,9 @@ PMwrk2csv <- function(prefix,ext=NULL,nsub){
       assayLine <- grep("ASSAY COEFFICIENTS FOLLOW",data)
       if(length(assayLine)>0){
         assayError <- matrix(scan(file=filename,skip=assayLine,n=4*numout,quiet=T),nrow=numout,byrow=T)
-      }  
+      } else {
+        assayError <- matrix(rep(NA,4*numout),nrow=numout,byrow=T)
+      }
       #build matrix for subject i
       temp <- matrix(nrow=doses+(nobs*numout),ncol=13+rates)
       
@@ -147,7 +155,7 @@ PMwrk2csv <- function(prefix,ext=NULL,nsub){
       } else {names(temp) <- c("id","evid","time","dur","dose","addl","ii","input","out","outeq","c0","c1","c2","c3")}
       temp <- temp[order(temp$time),]
       temp$age <- age
-      temp$sex <- sex
+      temp$male <- male
       temp$height <- height
     } else {stop("This function is only for old working copy (single drug) files.\n")}
     new <- rbind(new,temp)

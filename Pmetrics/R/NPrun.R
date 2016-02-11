@@ -34,10 +34,10 @@
 #' 1 or 2 = index of 1; 3 = 3; 4 = 4, 5 = 6,
 #' 6 or more is 10+number of multiples for each parameter greater than 5, e.g. 6 = 101; 7 = 102, up to 108 for 13 or more parameters.
 #' @param icen Summary of parameter distributions to be used to calculate predictions in HTML report.  Default is "median", but could be "mean".  
-#' #Predictions based on both summaries will be available in objects loaded by \code{\link{PMload}}.
-#' @param aucint Interval for AUC calculations.  Default is 24 hours if the number of intervals is not greater than 48; otherwise it defaults
+#' Predictions based on both summaries will be available in objects loaded by \code{\link{PMload}}.
+#' @param aucint Maintained for backwards compatibility and not used currently. Interval for AUC calculations.  Default is 24 hours if the number of intervals is not greater than 48; otherwise it defaults
 #' to the interval which allows for <= 48 intervals.
-#' @param idelta Interval in minutes for predictions at times other than observations.  Default is 12.
+#' @param idelta Interval in 1/60 time unit, typically minutes, for predictions at times other than observations.  Default is 12.
 #' @param prior Name of a suitable NPAG output object from a prior run loaded with \code{\link{PMload}},
 #' i.e. the \emph{NPdata} object.  A \code{prior} may be specified if the user wishes to
 #' start from a non-uniform prior distribution for the NPAG run. The default value is -99,
@@ -54,6 +54,11 @@
 #' @param silent Boolean operator controlling whether a model summary report is given.  Default is \code{TRUE}.
 #' @param overwrite Overwrite existing run result folders.  Default is \code{FALSE}.
 #' @param nocheck Suppress the automatic checking of the data file with \code{\link{PMcheck}}.  Default is \code{FALSE}.
+#' @param parallel Run NPAG in parallel.  Default is \code{NA}, which will be set to \code{TRUE} for models that use
+#' differential equations, and \code{FALSE} for algebraic/explicit models.  The majority of the benefit for parallelization comes
+#' in the first cycle, with a speed-up of approximately 80\% of the number of available cores on your machine, e.g. an 8-core machine
+#' will speed up the first cycle by 0.8 * 8 = 6.4-fold.  Subsequent cycles approach about 50\%, e.g. 4-fold increase on an 8-core
+#' machine.  Overall speed up for a run will therefore depend on the number of cycles ru and the number of cores.
 #' @return A successful NPAG run will result in creation of a new folder in the working
 #' directory.  This folder will be named with a date-time stamp in the format "out-YYYYMMMDD-hhmm",
 #' e.g. out-2011Apr10-1015.  Under this folder will be four subfolders: etc, inputs, outputs, and
@@ -84,7 +89,7 @@ NPrun <- function(model="model.txt",data="data.csv",run,
                   include,exclude,ode=-4,tol=0.01,salt,cycles=100,
                   indpts,icen="median",aucint,
                   idelta=12,prior,
-                  auto=T,intern=F,silent=F,overwrite=F,nocheck=F){
+                  auto=T,intern=F,silent=F,overwrite=F,nocheck=F,parallel=NA){
   
   if(missing(run)) run <- NULL
   if(missing(include)) include <- NULL
@@ -98,7 +103,7 @@ NPrun <- function(model="model.txt",data="data.csv",run,
                    include=include,exclude=exclude,ode=ode,tol=tol,salt=salt,cycles=cycles,
                    indpts=indpts,icen=icen,aucint=aucint,
                    idelta=idelta,prior=prior,
-                   auto=auto,intern=intern,silent=silent,overwrite=overwrite,nocheck=nocheck)
+                   auto=auto,intern=intern,silent=silent,overwrite=overwrite,nocheck=nocheck,parallel=parallel)
   return(outpath)
   
 }

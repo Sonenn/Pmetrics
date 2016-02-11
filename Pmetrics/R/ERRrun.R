@@ -74,7 +74,7 @@ ERRrun <- function(model="model.txt",data="data.csv",run,include,exclude,
   outpath <- .PMrun(type="ERR",model=model,data=data,run=run,
                    include=include,exclude=exclude,ode=ode,tol=tol,salt=salt,cycles=cycles,
                    search=search,xdev=xdev,icen=NULL,
-                   auto=auto,intern=intern,silent=silent,overwrite=overwrite,nocheck=nocheck)
+                   auto=auto,intern=intern,silent=silent,overwrite=overwrite,nocheck=nocheck,parallel=F)
   return(outpath)
   
 }

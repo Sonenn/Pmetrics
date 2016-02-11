@@ -14,6 +14,9 @@
 #'
 #' @param run When the current working directory is the Runs folder, the folder name of a previous run that you wish to use for the npde,
 #' which will typically be a number, e.g. 1.
+#' @param data An optional data file in the Runs folder to use as an external dataset for NPDE.  The population parameters
+#' from \code{run} will be used with the subjects in \code{data}.  If missing, the original population
+#' will be used.
 #' @param outeq The number of the output equation to simulate/test.  Default is missing, which will test all output equations.
 #' @param nsim The number of simulations per subject in the data file.  We recommend 1000 (the default)
 #' to return valid npde results.  More may result in excessive simulation times.
@@ -30,7 +33,7 @@
 #' 
 #' Mentre F, Escolano S (2006) Prediction discrepancies for the evaluation of nonlinear mixed-effects models. \emph{J Pharmacokinet Pharmacodyn}, 33:345-67
 
-makeNPDE <- function(run,outeq,nsim=1000,...){
+makeNPDE <- function(run,data,outeq,nsim=1000,...){
   
   if(length(grep("npde",installed.packages()[,1]))==0){
     install.packages("npde",repos="http://cran.cnr.Berkeley.edu",dependencies=T)
@@ -50,7 +53,7 @@ makeNPDE <- function(run,outeq,nsim=1000,...){
     #get model and data files
     instrfile <- suppressWarnings(tryCatch(readLines(paste(run,"etc/instr.inx",sep="/")),error=function(e) NULL))
     if(length(grep("IVERIFY",instrfile))==0){ #not updated instruction file
-      modelfile <- readline("Run used old instruction file. Enter model name. ")
+      modelfile <- readline("Your run used an old instruction file. Enter model name. ")
     } else { #ok we are using updated instruction file
       if(length(instrfile)>0){  #ok we got one
         #model.for file name
@@ -66,12 +69,18 @@ makeNPDE <- function(run,outeq,nsim=1000,...){
     
     
     #now get the data file  
-    RFfile <- suppressWarnings(tryCatch(readLines(Sys.glob(paste(run,"outputs/??_RF0001.TXT",sep="/"))),error=function(e) NULL))
-    if(length(RFfile)>0){
-      datafileName <- tail(RFfile,1)
-      file.copy(from=paste(run,"inputs",datafileName,sep="/"),to=paste(run,"/npde",sep=""))
-      datafile <- datafileName
-    } else {stop("Data file not found\n")}
+    if(missing(data)){
+      RFfile <- suppressWarnings(tryCatch(readLines(Sys.glob(paste(run,"outputs/??_RF0001.TXT",sep="/"))),error=function(e) NULL))
+      if(length(RFfile)>0){
+        datafileName <- tail(RFfile,1)
+        file.copy(from=paste(run,"inputs",datafileName,sep="/"),to=paste(run,"/npde",sep=""))
+        datafile <- datafileName
+      } else {stop("Data file not found\n")}
+    } else {
+      datafileName <- data
+      file.copy(from=datafileName,to=paste(run,"/npde",sep=""))
+      file.remove(datafileName)
+    }
   } else {stop("Please supply a run number.\n")}
   
   #parse dots
@@ -101,7 +110,11 @@ makeNPDE <- function(run,outeq,nsim=1000,...){
   invisible(file.remove(Sys.glob("simout*.txt")))
   
   #do the simulation
-  set.seed(-17)
+  if("seed" %in% names(argsSIM)){
+    seed.start <- argsSIM$seed
+    argsSIM[[which(names(argsSIM)=="seed")]] <- NULL
+  } else {seed.start <- -17}
+  set.seed(seed.start)
   argsSIM <- c(list(poppar=get(paste("final",run,sep=".")),data=datafile,model=modelfile,nsim=nsim,seed=runif(nsub,-100,100),obsNoise=rep(0,4*nout)),argsSIM)
   do.call("SIMrun",argsSIM)
   #read and format the results of the simulation

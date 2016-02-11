@@ -8,7 +8,10 @@
 #' @param file The name of the file to be loaded, including the full path if not
 #'  in the current working directory (check with \code{\link{getwd}}).
 #' @param skip Skip \emph{n} lines, with default set to 1.
-#' @param delim Delimiter between columns, which is a comma by default
+#' @param sep Delimiter between columns, which is a comma by default, but can be changed with
+#' \code{\link{setPMoptions}}.
+#' @param dec Decimal separator, which is a period by default, but can be changed with
+#' \code{\link{setPMoptions}}.
 #' @param quiet Default is \emph{false}.  If \emph{true}, there will be no report to
 #'  the console on the contents of file.
 #' @param \dots Other parameters to be passed to \code{\link{read.table}}
@@ -34,7 +37,7 @@
 #'  the column headers of the scanned file will be reported to the console as a validation check.
 #' @author Michael Neely 
 #' @seealso \code{\link{PMwriteMatrix}}, \code{\link{PMcheckMatrix}}, and \code{\link{plot.PMmatrix}}
-PMreadMatrix <- function(file,skip=1,delim=",",quiet=F,...){
+PMreadMatrix <- function(file,skip=1,sep=getPMoptions("sep"),dec=getPMoptions("dec"),quiet=F,...){
 #get data
   if (missing(file)){
     warning("Please provide filename of Pmetrics block input file.\n")
@@ -45,9 +48,9 @@ PMreadMatrix <- function(file,skip=1,delim=",",quiet=F,...){
     return(invisible())
   }
   
-  parnames <- scan(file,skip=skip,what="character",quiet=T,nlines=1,sep=delim,strip.white=T)
+  parnames <- scan(file,skip=skip,what="character",quiet=T,nlines=1,sep=sep,dec=dec,strip.white=T)
   parnames[1] <- "id"
-  data <- read.table(file,skip=skip+1,header=F,na.strings=".",comment.char="#",sep=delim,stringsAsFactors=F,...)
+  data <- read.table(file,skip=skip+1,header=F,na.strings=".",comment.char="#",sep=sep,dec=dec,stringsAsFactors=F,...)
   names(data) <- tolower(parnames)
 
   

@@ -38,9 +38,10 @@ PMwriteMatrix <- function(data,filename,override=F,version="DEC_11"){
   eol <- c("\r\n","\n","\r\n")[OS]  
   f <- file(filename,"w")  
   writeLines(paste("POPDATA ",version,"\n#",sep=""),f,sep="")
-  writeLines(toupper(names(data)[-ncol(data)]),sep=",",f)
+  writeLines(toupper(names(data)[-ncol(data)]),sep=getPMoptions("sep"),f)
   writeLines(toupper(names(data)[ncol(data)]),f)
-  write.table(data,f,row.names=F,na=".",quote=F,sep=",",col.names=F,eol=eol)
+  write.table(data,f,row.names=F,na=".",quote=F,sep=getPMoptions("sep"),
+              dec=getPMoptions("dec"),col.names=F,eol=eol)
   close(f)
   return(invisible(err))
 }

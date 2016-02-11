@@ -49,6 +49,7 @@
 #' which is the default, then the maximum time per subject will be the upper bound of the time interval.
 #' Like \code{first}, \code{last} can be a vector, with the last value recycled as necessary.  Use \code{NA} in the vector
 #' to signify maximum time for that subject.
+#' @param terminal Number of observations to use for terminal curve fitting (i.e. to estimate \emph{k}).  Default is 3.
 #' @return A dataframe of class \emph{PMnca} with columns
 #'  \item{id }{Subject identification}
 #'  \item{auc }{Area under the time-observation curve, using the trapezoidal approximation, from time 0 until the second dose, 
@@ -72,7 +73,8 @@
 #'  \item{dose }{Dose for each subject}
 #' @author Michael Neely
 
-makeNCA <- function(x,postPred=F,include,exclude,input=1,icen="median",outeq=1,block=1,start=0,end=Inf,first=NA,last=NA){
+makeNCA <- function(x,postPred=F,include,exclude,input=1,icen="median",outeq=1,block=1,
+                    start=0,end=Inf,first=NA,last=NA,terminal=3){
   
   if(length(grep("plyr",installed.packages()[,1]))==0){
     install.packages("plyr",repos="http://cran.cnr.Berkeley.edu",dependencies=T)
@@ -334,11 +336,11 @@ makeNCA <- function(x,postPred=F,include,exclude,input=1,icen="median",outeq=1,b
     NCA[i,3] <- makeAUC(temp2,out~tad,icen=icen,outeq=outeq,block=block)[,2] #aumc
     
     if(nrow(temp)>=5){
-      temp <- tail(temp,3)
+      temp <- tail(temp,terminal)
       temp <- temp[temp$out>0,]
       k <- tryCatch(-coef(lm(log(temp$out)~temp$tad))[2],error=function(e) -1)
       if(k<=0){
-        cat(paste("Subject",temp$id[1],"does not have decreasing terminal 3 concentrations; some NCA values cannot be computed.\n"))
+        cat(paste("Subject",temp$id[1],"does not have decreasing terminal",terminal,"concentrations; some NCA values cannot be computed.\n"))
         NCA[i,4:6] <- NA
       } else {
         NCA[i,4] <-  k

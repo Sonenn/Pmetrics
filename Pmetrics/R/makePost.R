@@ -102,11 +102,11 @@ makePost <- function(run,NPdata) {
   } else { #we are dealing with the new format
     predLines <- grep("BASED, IN ORDER, ON THE POSTERIOR MEANS, MEDIANS, AND MODES:",preddata)
     raw <- list()
-    pb <- txtProgressBar(min = 1, max = NPdata$nsub, style = 3)
+    if(NPdata$nsub>1) pb <- txtProgressBar(min = 1, max = NPdata$nsub, style = 3)
     cat("\nObtaining posterior predicted time-observation profiles for each subject.\n")
     flush.console()
     for(i in 1:NPdata$nsub){
-      setTxtProgressBar(pb,i)
+      if(NPdata$nsub>1) setTxtProgressBar(pb,i)
       raw[[i]] <- data.frame(matrix(scan(predfile,skip=predLines[i]+1,nlines=NPdata$numt[i],quiet=T),ncol=1+3*NPdata$numeqt,byrow=T))
       names(raw[[i]]) <- c("time",unlist(lapply(1:NPdata$numeqt,function(x) paste(c("mean","median","mode"),x,sep=""))))
       raw[[i]]$id <- NPdata$sdata$id[i]

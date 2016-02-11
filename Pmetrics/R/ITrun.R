@@ -41,11 +41,11 @@
 #' and you can find the HTML summary page in the /outputs folder: IT2Breport.html.
 #' @param silent Boolean operator controlling whether a model summary report is given.  Default is \code{True}.
 #' @param nocheck Suppress the automatic checking of the data file with \code{\link{PMcheck}}.  Default is \code{FALSE}.
+#' @param overwrite Overwrite existing run result folders.  Default is FALSE.
 #' @return A successful IT2B run will result in creation of a new folder in the working
 #' directory.  This folder will be named with a date-time stamp in the format "out-YYYYMMMDD-hhmm",
 #' e.g. out-2011Apr10-1015.  Under this folder will be four subfolders: etc, inputs, outputs, and
 #' wrkcopy, described below.
-#' @param overwrite Overwrite existing run result folders.  Default is FALSE.
 #' \itemize{
 #'  \item \bold{etc}   Control files for IT2B generally not needed by the user after a completed run.
 #'  \item \bold{inputs}   This folder will contain the .csv data file and the model file.
@@ -80,7 +80,7 @@ ITrun <- function(model="model.txt",data="data.csv",run,
   outpath <- .PMrun(type="IT2B",model=model,data=data,run=run,
                    include=include,exclude=exclude,ode=ode,tol=tol,salt=salt,cycles=cycles,icen=icen,
                    xdev=xdev,
-                   auto=auto,intern=intern,silent=silent,overwrite=overwrite,nocheck=nocheck)
+                   auto=auto,intern=intern,silent=silent,overwrite=overwrite,nocheck=nocheck,parallel=F)
   return(outpath)
   
 }

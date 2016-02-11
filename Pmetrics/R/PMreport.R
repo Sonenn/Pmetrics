@@ -8,6 +8,7 @@
 #' @param wd The working directory containing the NP_RFxxxx.TXT or IT_RFxxxx.TXT file
 #' @param icen Median (default), mean or mode of Bayesian posterior to be used to calculate predictions.
 #' @param type \dQuote{NPAG} (default) or \dQuote{IT2B} report type
+#' @param parallel Boolean parameter which indicates the type of run done.  Default is \code{FALSE} for serial.
 #' @return Several files are placed in the \code{wd}
 #' \item{NPAGreport.html or IT2Breport.html }{An .html file containing a summary of all the results}
 #' \item{poppoints.csv }{NPAG only: A .csv file containing the population support points and probabilities}
@@ -29,7 +30,7 @@
 #' @author Michael Neely
 
 
-PMreport <- function(wd,icen="median",type="NPAG"){
+PMreport <- function(wd,icen="median",type="NPAG",parallel=F){
   #1 for NPAG, 2 for IT2B, 1 for anything else
   reportType <- switch(type,NPAG=1,IT2B=2,1)
   
@@ -39,6 +40,18 @@ PMreport <- function(wd,icen="median",type="NPAG"){
   xtable.installed <- require(xtable)
   
   setwd(wd)
+  
+  #get elapsed time if available
+  if(file.exists("time.txt")){
+    execTime <- readLines("time.txt")
+    OS <- switch(gsub("[[:blank:]]","",execTime[1]),Unix=1,Windows=2,Linux=3)
+    if(OS==1 | OS==3){
+      elapsed <- difftime(as.POSIXct(execTime[3],format="%s"),as.POSIXct(execTime[2],format="%s"))
+    }
+    if(OS==2){
+      elapsed <- difftime(as.POSIXct(execTime[3],format="%T"),as.POSIXct(execTime[2],format="%T"))
+    }    
+  } else {elapsed <- NA}
   
   #initiate HTML file
   .CSSfile <- paste(path.package("Pmetrics"),"/report/Pmetrics.css",sep="")  
@@ -89,6 +102,7 @@ PMreport <- function(wd,icen="median",type="NPAG"){
     }
     cat("\n\n")
     flush.console()
+    if(is.null(PMdata$nranfix)) PMdata$nranfix <- 0
     
     
     #HTML body
@@ -171,7 +185,8 @@ PMreport <- function(wd,icen="median",type="NPAG"){
     writeHTML("<div id=\"tab-content4\" class=\"tab-content\">")
     if(!all(is.null(final))){
       report.table <- data.frame(mean=final$popMean,sd=final$popSD,CV=final$popCV,var=final$popVar,
-                                 median=final$popMedian)
+                                 median=final$popMedian,shrink=100*final$shrinkage$shrinkage)
+      names(report.table) <- c("Mean","SD","CV%","Var","Median","Shrink%")
       if(reportType==1){ #only for NPAG
         #Support point matrix
         writeHTML("<h2>Support Points</h2>")
@@ -180,6 +195,16 @@ PMreport <- function(wd,icen="median",type="NPAG"){
       #popparar
       writeHTML("<h2>Population Parameter Value Summaries</h2>")
       writeHTML(makeHTMLdf(report.table,3))
+      if(PMdata$nranfix>0){
+        ranfixdf <- data.frame(Parameter=PMdata$parranfix,Value=PMdata$valranfix)
+        writeHTML("<h2>Population Fixed (but Random) Values</h2>")
+        writeHTML(makeHTMLdf(ranfixdf,3))
+      }
+      if(PMdata$nofix>0){
+        fixdf <- data.frame(Parameter=PMdata$parfix,Value=PMdata$valfix)
+        writeHTML("<h2>Population Fixed (and Constant) Values</h2>")
+        writeHTML(makeHTMLdf(fixdf,3))
+      }
       #covariance matrix
       writeHTML("<h2>Population Parameter Value Covariance Matrix</h2>")
       writeHTML(makeHTMLdf(final$popCov,3))
@@ -193,8 +218,10 @@ PMreport <- function(wd,icen="median",type="NPAG"){
     #Tab 5 - Summary
     
     #summary
-    if(PMdata$nofix==0){parfix <- "There were no fixed parameters."
-    } else {parfix <- paste("Fixed parameters:",paste(PMdata$parfix,collapse=", "))}
+    if(PMdata$nofix==0){parfix <- "There were no constant fixed parameters."
+    } else {parfix <- paste("Constant fixed parameters:",paste(PMdata$parfix,collapse=", "))}
+    if(PMdata$nranfix==0){parranfix <- "There were no random fixed parameters."
+    } else {parranfix <- paste("Random fixed parameters:",paste(PMdata$parranfix,collapse=", "))}
     ilog <- PMdata$ilog
     if(is.null(PMdata$converge)){
       same <- 0
@@ -235,15 +262,17 @@ PMreport <- function(wd,icen="median",type="NPAG"){
       fixedvar <- paste("(",paste(PMdata$par[PMdata$fixedpos],collapse=", ")," fixed to be positive)",sep="")
     } else {fixedvar <- ""}
     writeHTML(paste("Engine: ",c("NPAG","IT2B")[reportType],"<br>",
+                    "Computation mode: ",c("Serial","Parallel")[1+as.numeric(parallel)],"<br>",
                     "Output file: <a href=",file.path(wd),c("/NP_RF0001.TXT target=_blank>","/IT_RF0001.TXT target=_blank>")[reportType],file.path(wd),c("/NP_RF0001.TXT</a><br>","/IT_RF0001.TXT</a><br>")[reportType],
                     "Random parameters: ",paste(paste(PMdata$par,collapse=", "),fixedvar,sep=" "),"<br>",
-                    parfix,"<br>",
+                    parranfix,"<br>",parfix,"<br>",
                     "Number of analyzed subjects: ",PMdata$nsub,"<br>",
                     "Number of output equations: ",PMdata$numeqt,"<br>",
                     "Number of cycles: ",PMdata$icyctot,"  ",confor1,coninterp,confor2,"<br>",
                     "Additional covariates: ",paste(PMdata$covnames,collapse=", "),"<br>",extra,sep=""))
     
-    if(PMdata$negflag){ writeHTML("WARNING: There were negative pop/post predictions.")}
+    if(PMdata$negflag){ writeHTML("WARNING: There were negative pop/post predictions.<br>")}
+    if(!is.na(elapsed)){ writeHTML(paste("Elapsed time for this run was",elapsed,attr(elapsed,"units"),"<br>"))}
     if(error){
       errmessage <- readLines(errfile)
       errmessage <- paste(errmessage,collapse="")
@@ -285,6 +314,7 @@ PMreport <- function(wd,icen="median",type="NPAG"){
       TEX(paste("Engine: ",c("NPAG","IT2B")[reportType],"\\newline",sep=""))
       TEX(paste("Output file: ",file.path(wd),c("/NP\\_RF0001.TXT","/IT\\_RF0001.TXT")[reportType],"\\newline",sep=""))
       TEX(paste("Random parameters:",paste(PMdata$par,collapse=", "),"\\newline",sep=""))
+      TEX(paste(parranfix,"\\newline"))
       TEX(paste(parfix,"\\newline"))
       TEX(paste("Number of analyzed subjects: ",PMdata$nsub,"\\newline"))
       TEX(paste("Number of output equations: ",PMdata$numeqt,"\\newline"))

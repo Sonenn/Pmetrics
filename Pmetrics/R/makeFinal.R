@@ -5,11 +5,13 @@
 #'
 #' @title Summarize NPAG or IT2B Final Cycle Population Values
 #' @param data A suitable data object of the \emph{NPAG} or \emph{IT2B} class (see \code{\link{NPparse}} or \code{\link{ITparse}}).
-#' @return The output of \code{makeFinal} is a list of class \emph{PMfinal}, which has 11 objects from NPAG,
-#' or 9 objects from IT2B:
+#' @return The output of \code{makeFinal} is a list of class \emph{PMfinal}, which contains the following:
 #' \item{popPoints }{(NPAG only) Dataframe of the final cycle joint population density of grid points
 #'  with column names equal to the name of each random parameter plus \emph{prob} for the
 #'  associated probability of that point}
+#' \item{postPoints}{(NPAG only) Dataframe of posterior population points for each of the first 100 subject,
+#' with columns id, point, parameters and probability.  The first column is the subject, the second column has the population
+#' point number, followed by the values for the parameters in that point and the probability.}
 #' \item{popMean }{The final cycle mean for each random parameter distribution}
 #' \item{popSD }{The final cycle standard deviation for each random parameter distribution}
 #' \item{popCV }{The final cycle coefficient of variation (SD/Mean) for each random parameter distribution}
@@ -17,6 +19,16 @@
 #' \item{popCov }{The final cycle random parameter covariance matrix}
 #' \item{popCor }{The final cycle random parameter correlation matrix}
 #' \item{popMedian }{The final cycle median values for each random parameter}
+#' \item{postMean }{The means of the posterior distributions for each parameter.}
+#' \item{postSD }{The SDs of the posterior distributions for each parameter.}
+#' \item{postVar }{The variances of the posterior distributions for each parameter.}
+#' \item{shrinkage }{A data frame with the shrinkage for each parameter.  \code{popVar}
+#' is comprised of variance(EBE) + variance(EBD), where EBE is the Emprical Bayes Estimate or mean of the posterior
+#' distribution for the parameter. EBD is the Empirical Bayes Distribution, or
+#' the full Bayesian posterior distribution. In other words, if Bayesian posterior distributions are wide
+#' for a given parameter due to sparse or uninformative sampling, then most of the population variance is due
+#' to this variance and shrinkage of the EBE variance is high because individual posterior estimates
+#' shrink towards the population mean.}
 #' \item{gridpts }{(NPAG only) Initial number of support points}
 #' \item{nsub }{Number of subjects}
 #' \item{ab }{Matrix of boundaries for random parameter values}
@@ -72,13 +84,14 @@ makeFinal <- function(data){
     dimnames(popCov) <- list(data$par,data$par)
     if (all(!is.na(popCor))) dimnames(popCor) <- list(data$par,data$par)
     
-    
-    temp1 <- melt(data$postden)
-    postPoints <- dcast(temp1,subj+nactvepost~density,value.var="value")
-    postPoints <- postPoints[!is.na(postPoints$prob),]
-    postPoints$prob <- postPoints$prob*wParVol
-    names(postPoints)[1:2] <- c("id","point")
-    postPoints$id <- data$sdata$id[postPoints$id]
+    if(length(data$postden)>0){
+      temp1 <- melt(data$postden)
+      postPoints <- dcast(temp1,subj+nactvepost~density,value.var="value")
+      postPoints <- postPoints[!is.na(postPoints$prob),]
+      postPoints$prob <- postPoints$prob*wParVol
+      names(postPoints)[1:2] <- c("id","point")
+      postPoints$id <- data$sdata$id[postPoints$id]
+    } else { postPoints <- NA}
     
     #     if(data$icyctot>0) {
     #       popMedian <- data$iaddl[6,,data$icyctot]
@@ -113,9 +126,27 @@ makeFinal <- function(data){
     popCV <- abs(100*(popSD/popMean))
     names(popCV) <- data$par
     
+    postMean <- data.frame(id=data$sdata$id,data$bmean)
+    
+    postSD <- data.frame(id=data$sdata$id,data$bsd)
+    
+    postVar <- data.frame(id=data$sdata$id,data$bsd^2)
+    
+    
+    #shrinkage
+    varEBD <- apply(postVar[,-1],2,mean)
+    sh <- varEBD/popVar
+    sh.DF <- data.frame(par=data$par,shrinkage=sh)
+    
+    if(is.null(data$nranfix)) data$nranfix <- 0
+    if(data$nranfix>0){
+      popRanFix <- data$valranfix
+      names(popRanFix) <- data$parranfix
+    } else {popRanFix <- NULL}
+
     
     outlist <- list(popPoints=popPoints,popMean=popMean,popSD=popSD,popCV=popCV,popVar=popVar,
-                    popCov=popCov,popCor=popCor,popMedian=popMedian,gridpts=gridpts,nsub=data$nsub,ab=data$ab,postPoints=postPoints)
+                    popCov=popCov,popCor=popCor,popMedian=popMedian,popRanFix=popRanFix,postMean=postMean,postSD=postSD,postVar=postVar,shrinkage=sh.DF,gridpts=gridpts,nsub=data$nsub,ab=data$ab,postPoints=postPoints)
     class(outlist)<-c("PMfinal","NPAG","list")
     return(outlist)
   }
@@ -141,9 +172,20 @@ makeFinal <- function(data){
     popMedian <- data$imed[data$icyctot,]
     names(popMedian) <- data$par
     
+    postMean <- data.frame(id=data$sdata$id,data$lpar)
+    
+    postSD <- data.frame(id=data$sdata$id,data$lsd)
+    
+    postVar <- data.frame(id=data$sdata$id,data$lsd^2)
+    
+    #shrinkage
+    varEBD <- apply(postVar[,-1],2,mean)
+    sh <- varEBD/popVar
+    sh.DF <- data.frame(par=data$par,shrinkage=sh)
+    
     
     outlist <- list(popMean=popMean,popSD=popSD,popCV=popCV,popVar=popVar,
-                    popCov=popCov,popCor=popCor,popMedian=popMedian,nsub=data$nsub,ab=data$ab)
+                    popCov=popCov,popCor=popCor,popMedian=popMedian,postMean=postMean,postSD=postSD,postVar=postVar,shrinkage=sh.DF,nsub=data$nsub,ab=data$ab)
     class(outlist)<-c("PMfinal","IT2B","list")
     return(outlist)
   }

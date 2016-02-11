@@ -221,7 +221,11 @@ NM2PM <- function(data,ctl){
   ncov <- length(covCol)
   if(ncov>0) {
     covNames <- inputs[covCol]
-    dataDF[,covCol] <- apply(dataDF[,covCol],2,as.numeric)
+    if(ncov==1){
+      dataDF[,covCol] <- as.numeric(dataDF[,covCol])
+    } else {
+      dataDF[,covCol] <- apply(dataDF[,covCol],2,as.numeric)
+    }
   }
   
   
@@ -241,13 +245,32 @@ NM2PM <- function(data,ctl){
   
   
   #start to build Pmetrics file
+  
+  #create dur column
+  if(!is.na(colNums$RATE)){
+    dur <- round(dataDF[,colNums$AMT]/dataDF[,colNums$RATE],3)
+  } else {
+    dur <- 0
+  }
+  #create ADDL and II columns
+  if(!is.na(colNums$ADDL)){
+    addl <- dataDF[,colNums$ADDL]
+  } else {
+    addl <- NA
+  }
+  if(!is.na(colNums$II)){
+    ii <- dataDF[,colNums$II]
+  } else {
+    ii <- NA
+  }
+  
   PMdata <- data.frame(id=dataDF[,colNums$ID],
                        evid=dataDF[,colNums$EVID],
                        time=dataDF[,colNums$TIME],
-                       dur=ifelse(!is.na(colNums$RATE),round(dataDF[,colNums$AMT]/dataDF[,colNums$RATE],3),0),
+                       dur=dur,
                        dose=dataDF[,colNums$AMT],
-                       addl=ifelse(!is.na(colNums$ADDL),dataDF[,colNums$ADDL],NA),
-                       ii=ifelse(!is.na(colNums$II),dataDF[,colNums$II],NA),
+                       addl=addl,
+                       ii=ii,
                        input=ifelse(dataDF[,colNums$EVID]==0,NA,dataDF[,colNums$CMT]),
                        out=ifelse(dataDF[,colNums$EVID]==0,
                                   dataDF[,colNums$DV],NA),
@@ -283,6 +306,10 @@ NM2PM <- function(data,ctl){
     PMdata$dur[PMdata$evid==1][missingDur] <- 0
     msg <- c(msg,"Missing DUR for EVID=1 dose events was set to 0.\n")
   }
+  #fix DUR on non-doses
+  PMdata$dur[PMdata$evid!=1] <- NA
+  #fix DUR that are INF due to 0 rate
+  PMdata$dur[PMdata$dur==Inf] <- 0
   
   #fix CMT to be outeq for observations and input for doses
   cmtObs <- unique(PMdata$outeq[PMdata$evid==0])

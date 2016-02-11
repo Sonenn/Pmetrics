@@ -18,12 +18,13 @@
 #'  \item All observation events (EVID=0) must have entries in ID, EVID, TIME, OUT, OUTEQ.
 #'  If an observation is missing, use \emph{-99}; otherwise use a \dQuote{.} as a placeholder
 #'  in cells that are not required (e.g. INPUT for an observation event).
-#'  \item If covariates are present in the data, there must be an entry for every covariate at time 0 fore each subject.
+#'  \item If covariates are present in the data, there must be an entry for every covariate at time 0 for each subject.
 #'  \item All covariates must be numeric.
 #'  \item All times within a subject ID must be monotonically increasing.
 #'  \item All subject IDs must be contiguous.
 #'  \item All rows must have EVID and TIME values.
 #'  \item All columns must be numeric except ID which may be alpha-numeric.
+#'  \item All subjects must have at least one observation, which could be missing, i.e. -99.
 #'  }
 #'  
 #' To use this function, see the example below.
@@ -89,6 +90,7 @@
 #'  \item{timeOrder}{Ensure that all times within a subject ID are monotonically increasing.}
 #'  \item{contigID}{Ensure that all subject IDs are contiguous.}
 #'  \item{nonNum}{Ensure that all columns except ID are numeric.}
+#'  \item{noObs}{Ensure that all subjects have at least one observation, which could be missing, i.e. -99.}
 
 
 
@@ -129,7 +131,9 @@ PMcheck <- function(data,model,fix=F,quiet=F){
                 covT0=list(msg="OK - There are no covariates in the dataset.",results=NA,col=15,code=10),
                 timeOrder=list(msg="OK - All times are increasing within a subject, given any EVID=4.",results=NA,col=3,code=11),
                 contigID=list(msg="OK - All subject IDs are contiguous.",results=NA,col=1,code=12),
-                nonNum=list(msg="OK - All columns that must be numeric are numeric.",results=NA,col=NA,code=13)
+                nonNum=list(msg="OK - All columns that must be numeric are numeric.",results=NA,col=NA,code=13),
+                noObs=list(msg="OK - All subjects have at least one observation.",results=NA,col=1,code=14)
+                
     )
     #set initial attribute to 0 for no error
     attr(err,"error") <- 0
@@ -283,6 +287,14 @@ PMcheck <- function(data,model,fix=F,quiet=F){
       attr(err,"error") <- -1
     }
     
+    #check that all subjects have at least one observation
+    subjObs <- tapply(data2$evid,data2$id,function(x) sum(x==0,na.rm=T))
+    if(any(subjObs==0)){
+      subjMissObs <- unique(data2$id)[which(subjObs==0)]
+      err$noObs$msg <- "FAIL - The following rows are subjects with no observations."
+      err$noObs$results <- which(data2$id %in% subjMissObs)
+    }
+    
     #create the color coded Excel file using code from Patrick Nolain
     if(xlsx.installed){
       # Definition of a table of n types of errors, each one with 'code' and 'color' properties
@@ -298,7 +310,8 @@ PMcheck <- function(data,model,fix=F,quiet=F){
                                           "Missing one or more covariate values at TIME=0",
                                           "TIME entry out of order",
                                           "Non-contiguous subject ID",
-                                          "Column with non-numeric rows (green)"),
+                                          "Column with non-numeric rows (green)",
+                                          "Subject with no observations"),
                                 stringsAsFactors=F)
       numError <- nrow(errorsTable)
       errorsTable$code <- 1:numError
@@ -536,6 +549,11 @@ PMcheck <- function(data,model,fix=F,quiet=F){
     #Report non-numeric columns
     if(length(grep("FAIL",err$nonNum$msg))>0){
       report <- c(report,paste("Your dataset has non-numeric columns.  Fix manually."))    
+    }
+    
+    #Report subjects with no observations
+    if(length(grep("FAIL",err$noObs$msg))>0){
+      report <- c(report,paste("Your dataset has subjects with no observations.  Fix manually."))    
     }
     
     if(!quiet) cat("\nFIX DATA REPORT:\n")

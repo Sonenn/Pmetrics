@@ -10,13 +10,13 @@
 #' @param icen A character vector to summarize covariate values.  Default is \dQuote{median}, but can also be 
 #' \dQuote{mean}.  
 #' @param direction The direction for covariate elmination can be \dQuote{backward}, \dQuote{forward}, or \dQuote{both}.  
-#' \emph{both} is the default.
+#' \emph{backward} is the default.
 #' @return A matrix with covariates in the rows and parameters in the columns.  Values for the matrix are the multi-variate P-values.
 #' A value of \code{NA} indicates that the variable was not retained in the final model.
 #' @author Michael Neely
 #' @seealso \code{\link{step}}
 
-PMstep <- function(x,icen="median",direction="both"){
+PMstep <- function(x,icen="median",direction="backward"){
   if(!inherits(x,"PMcov")) stop("Please supply a PMcov object made by makeCov or loaded with NPload or ITload.\n")
   ncov <- attr(x,"ncov")
   if(is.null(ncov)){

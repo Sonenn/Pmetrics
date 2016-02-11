@@ -15,6 +15,11 @@
 #' that contains template regimens and observation times.  The value for outputs can be coded as
 #' any number(s) other than -99.  The number(s) will be replaced in the simulator output with the simulated values.
 #' @param nsamp The number of MM-optimal sample times to compute; default is 1, but can be up to 4.  Values >4 will be capped at 4.
+#' @param weight Character label:
+#' \itemize{
+#' \item \code{none} The default. MMopt times will be chosen to maximally discriminate all responses at all times.
+#' \item \code{AUC} MMopt times will be chosen to maximally discriminate AUC, regardless of the shape of the response profile. 
+#' }
 #' @param predInt The interval in fractional hours for simulated predicted outputs at times other than those specified in the template \code{data}.  
 #' The default is 0.5, which means there will be simulated outputs every 30 minutes from time 0 up 
 #' to the maximal time in the template file.  You may also specify \code{predInt}
@@ -35,22 +40,29 @@
 #' @seealso \code{\link{SIMrun}}, \code{\link{plot.MMopt}}, \code{\link{print.MMopt}}
 
 
-MMopt <- function(poppar,model="model.txt",data="data.csv",nsamp=1,predInt=0.5,outeq=1,...){
+MMopt <- function(poppar,model="model.txt",data="data.csv",nsamp=1,weight=c("none","AUC"),predInt=0.5,outeq=1,...){
+  
+  #remove prior simulations if they exist
+  old <- Sys.glob("MMsim*.txt")
+  invisible(file.remove(old))
   popPoints <- poppar$popPoints
   if(nsamp>4) nsamp <- 4
   #simulate each point
-  SIMrun(poppar=poppar,model=model,data=data,nsim=0,predInt=predInt,outname="MMsim",obsNoise=NA,silent=T,...)
+  SIMrun(poppar=poppar,model=model,data=data,nsim=0,predInt=predInt,obsNoise=NA,outname="MMsim",silent=T,...)
   #parse the simulated output
   simdata <- SIMparse("MMsim*.txt",combine=T,silent=T)
   simdata$obs <- simdata$obs[simdata$obs$outeq==outeq,]
   #transform into format for MMopt
+  #nsubs is the number of subjects
   nsubs <- length(unique(simdata$obs$id))
+  #time is the simulated times
   time <- unique(simdata$obs$time) 
+  #nout is the number of simulated times (outputs)
   nout <- length(time)
-  time <- unique(simdata$obs$time) 
+  #Mu is a matrix of nout rows x nsubs columns containing the outputs at each time
   Mu <- t(matrix(simdata$obs$out,nrow=nsubs,byrow=T))
 
-
+  #pH is the vector of probabilities of each population point
   pH <- popPoints[,ncol(popPoints)]
   #replicate pH and normalize based on number of simulation templates
   ntemp <- nsubs/nrow(popPoints)
@@ -63,17 +75,32 @@ MMopt <- function(poppar,model="model.txt",data="data.csv",nsamp=1,predInt=0.5,o
   errLine <- grep(" EQUATIONS, IN ORDER, WERE:",simout)
   cassay <- scan("MMsim1.txt",n=4,skip=errLine+numeqt-1,quiet=T)
   
+  #make the weighting Matrix
+  #default is no penalites (diag=0, off-diag=1)
+  C <- matrix(1,nrow=nsubs,ncol=nsubs)
+  diag(C) <- 0
+  
+  weight <- tolower(match.arg(weight))
+  if(weight=="auc"){
+    sqdiff <- sapply(1:nsubs,function(x) (auc[x] - auc)^2 )
+    C <- matrix(sqdiff,nrow=nsubs,ncol=nsubs)
+  }
+  
   # Call MMMOPT1 routine to compute optimal sampling times
-  mmopt1<-mmopt1(Mu,time,pH,cassay,nsamp,nsubs,nout);
-  optsamp<-mmopt1$optsamp
-  brisk<-mmopt1$brisk
-  optindex<-mmopt1$optindex
+  mmopt1 <- wmmopt1(Mu,time,pH,cassay,nsamp,nsubs,nout,C);
+  optsamp <- mmopt1$optsamp
+  brisk <- mmopt1$brisk_cob
+  optindex <- mmopt1$optindex
+  Cbar <- mmopt1$Cbar
+  
   
   # ---------------------------
   
 
   
-  mmopt <- list(sampleTime=optsamp[1:nsamp,nsamp],bayesRisk=brisk[nsamp],simdata=simdata)
+  mmopt <- list(sampleTime=optsamp[1:nsamp,nsamp],
+                bayesRisk=brisk[nsamp],Cbar=Cbar,
+                simdata=simdata)
   class(mmopt) <- c("MMopt","list")
   return(mmopt)
   

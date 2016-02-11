@@ -79,19 +79,22 @@
 
 
 plot.PMfinal <- function(x,formula,include,exclude,ref=T,cex.lab=1.2,col,col.ref,alpha.ref=0.5,pch,cex,lwd,lwd.ref,density=F,scale=20,bg,standard=F,
-                         probs=c(0.05,0.25,0.5,0.75,0.95),legend=T,grid=T,xlab,ylab,xlim,ylim,out=NA,...){
+                         probs=c(0.05,0.25,0.5,0.75,0.95),legend=T,grid=T,layout,xlab,ylab,xlim,ylim,out=NA,...){
   #choose output
   if(inherits(out,"list")){
     if(out$type=="eps") {setEPS();out$type <- "postscript"}
     if(length(out)>1) {do.call(out$type,args=out[-1])} else {do.call(out$type,list())}
   }
-  .par <- par(no.readonly=T) #save current graphical parameters
+  .par <- par("mfrow") #save current layout
   if(missing(formula)){ #univariate plot
     data <- x
     if(missing(col)) col <- "red"
     if(missing(lwd)) lwd <- 4
-    par(mfrow=c(ceiling(length(data$popMean)/3),ifelse(length(data$popMean)>2,3,length(data$popMean))))
+    if(missing(layout)){
+      par(mfrow=c(ceiling(length(data$popMean)/3),ifelse(length(data$popMean)>2,3,length(data$popMean))))
+    } else {par(mfrow=layout)}
     par(mar=c(5,5,4,2)+0.1)
+    
     if(inherits(data,"NPAG")){
       if(missing(ylim)) ylim <- c(0,max(data$popPoints[,"prob"]))
       for (i in 1:(ncol(data$popPoints)-1)){        
@@ -133,54 +136,113 @@ plot.PMfinal <- function(x,formula,include,exclude,ref=T,cex.lab=1.2,col,col.ref
     if(missing(cex)) cex <- 1
     
     if(inherits(data,"IT2B")){
-      
-      #internal ellipse function from package mixtools
-      ellipse <- function(mu,sigma,alpha = 0.05,npoints=250,newplot=FALSE,draw=TRUE, ...) 
-      {
-        es <- eigen(sigma)
-        e1 <- es$vec %*% diag(sqrt(es$val))
-        r1 <- sqrt(qchisq(1 - alpha, 2))
-        theta <- seq(0, 2 * pi, len = npoints)
-        v1 <- cbind(r1 * cos(theta), r1 * sin(theta))
-        pts = t(mu - (e1 %*% t(v1)))
-        if (newplot && draw) {
-          plot(pts, ...)
-        }
-        else if (!newplot && draw) {
-          lines(pts, ...)
-        }
-        invisible(pts)
-      }
-      ell <- array(NA,dim=c(length(probs),250,2))
-      for(i in 1:length(probs)){
-        ell[i,,] <- ellipse(mu=c(data$popMean[xCol],data$popMean[yCol]),sigma=data$popCov[c(xCol,yCol),c(xCol,yCol)],type="l",alpha=probs[i],draw=F)
-      }
-      graycols <- rev(gray.colors(n=length(probs),start=0,end=0.9))
-      if(missing(xlim)) xlim <- range(ell[,,1])
-      if(missing(ylim)) ylim <- range(ell[,,2])
-      if(missing(col)) col="white"
-      if(missing(lwd)) lwd <- 1
-      if(!missing(legend)){        
-        if(class(legend)=="list"){
-          legend$plot<- T
-          if(is.null(legend$x)) legend$x <- "topright"
-          if(is.null(legend$fill)) legend$fill <- graycols
-          if(is.null(legend$legend)) legend$legend <- 1-probs
-          if(is.null(legend$title)) legend$title <- "Quantile"
+      if(yCol=="prob"){ #posterior plot
+        #filter includes and excludes
+        if(!missing(include)) data$postMean <- subset(data$postMean,as.character(data$postMean$id) %in% as.character(include))
+        if(!missing(exclude)) data$postMean <- subset(data$postMean,!sub("[[:space:]]+","",as.character(data$postMean$id)) %in% as.character(exclude))
+        #number of subjects to plot
+        subjID <- unique(data$postMean$id)
+        nsub <- length(subjID)
+        #default values and layout
+        if(missing(col)) col <- "red"
+        if(missing(lwd)) lwd <- 4
+        if(missing(layout)){
+          if(nsub>4){
+            par(mfrow=c(2,2))
+            devAskNewPage(T)
+          } else {
+            par(mfrow=c(ceiling(nsub/2),ifelse(nsub>2,2,nsub)))
+          }
         } else {
-          if(legend) legend <- {list(plot=T,x="topright",legend=1-probs,fill=graycols,title="Quantile")} else {legend <- list(plot=F)}
+          par(mfrow=layout)
+          if(nsub>sum(layout)) {devAskNewPage(T)}
         }
-      } else {legend <- list(plot=F)}
-      
-      plot(NA,cex.lab=cex.lab,xlim=xlim,ylim=ylim,type="n",xlab=xlab,ylab=ylab,...)
-      
-      
-      for(i in 1:length(probs)){
-        polygon(ell[i,,],col=graycols[i],lwd=lwd)
+        par(mar=c(5,5,4,2)+0.1)
+        
+        if(ref){ #adding in population marginal as reference
+          
+          i <- which(names(data$postMean)==all.vars(formula)[2])-1 #choose the right variable
+          x.pop <- seq(data$ab[i,1],data$ab[i,2],(data$ab[i,2]-data$ab[i,1])/1000)
+          y.pop <- dnorm(x.pop,mean=data$popMean[i],sd=data$popSD[i])
+          
+          if(missing(col.ref)) col.ref <- "gray50"
+          #make semi transparent
+          col.ref.rgb <- col2rgb(col.ref,T)/255
+          col.ref.trans <- rgb(col.ref.rgb[1,],col.ref.rgb[2,],col.ref.rgb[3,],alpha.ref)
+          if(missing(lwd.ref)) lwd.ref <- 3
+          if(missing(xlim)) xlim <- range(x.pop)
+        }
+        
+        this.x <- seq(data$ab[i,1],data$ab[i,2],(data$ab[i,2]-data$ab[i,1])/1000)
+        #cycle through subjects to get y coordinates
+        this.y <- matrix(NA,ncol=length(this.x),nrow=nsub)
+        for (j in 1:nsub){
+          #get the x & y parameters
+          this.y[j,] <- dnorm(this.x,mean=data$postMean[j,i+1],sd=data$postSD[j,i+1])
+        } 
+        
+        if(standard){
+          xlim <- range(this.x)
+          ylim <- range(this.y)
+        }
+        if(missing(xlim)){xlim <- NULL}
+        if(missing(ylim)){ylim <- NULL}
+        
+        for(j in 1:nsub){
+          plot(this.y[j,]~this.x,type="l",lwd=lwd,col=col,ylab="Probability",
+               xlab=attr(terms(formula),"term.labels"),cex.lab=cex.lab,
+               main=paste("Subject",data$postMean$id[j]),xlim=xlim,ylim=ylim,...)
+          if(ref){lines(y.pop~x.pop,type="l",col=col.ref.trans,lwd=lwd.ref)}
+        }
+      } else {
+        #internal ellipse function from package mixtools
+        ellipse <- function(mu,sigma,alpha = 0.05,npoints=250,newplot=FALSE,draw=TRUE, ...) 
+        {
+          es <- eigen(sigma)
+          e1 <- es$vec %*% diag(sqrt(es$val))
+          r1 <- sqrt(qchisq(1 - alpha, 2))
+          theta <- seq(0, 2 * pi, len = npoints)
+          v1 <- cbind(r1 * cos(theta), r1 * sin(theta))
+          pts = t(mu - (e1 %*% t(v1)))
+          if (newplot && draw) {
+            plot(pts, ...)
+          }
+          else if (!newplot && draw) {
+            lines(pts, ...)
+          }
+          invisible(pts)
+        }
+        ell <- array(NA,dim=c(length(probs),250,2))
+        for(i in 1:length(probs)){
+          ell[i,,] <- ellipse(mu=c(data$popMean[xCol],data$popMean[yCol]),sigma=data$popCov[c(xCol,yCol),c(xCol,yCol)],type="l",alpha=probs[i],draw=F)
+        }
+        graycols <- rev(gray.colors(n=length(probs),start=0,end=0.9))
+        if(missing(xlim)) xlim <- range(ell[,,1])
+        if(missing(ylim)) ylim <- range(ell[,,2])
+        if(missing(col)) col="white"
+        if(missing(lwd)) lwd <- 1
+        if(!missing(legend)){        
+          if(class(legend)=="list"){
+            legend$plot<- T
+            if(is.null(legend$x)) legend$x <- "topright"
+            if(is.null(legend$fill)) legend$fill <- graycols
+            if(is.null(legend$legend)) legend$legend <- 1-probs
+            if(is.null(legend$title)) legend$title <- "Quantile"
+          } else {
+            if(legend) legend <- {list(plot=T,x="topright",legend=1-probs,fill=graycols,title="Quantile")} else {legend <- list(plot=F)}
+          }
+        } else {legend <- list(plot=F)}
+        
+        plot(NA,cex.lab=cex.lab,xlim=xlim,ylim=ylim,type="n",xlab=xlab,ylab=ylab,...)
+        
+        
+        for(i in 1:length(probs)){
+          polygon(ell[i,,],col=graycols[i],lwd=lwd)
+        }
+        if(grid) abline(v=c(axTicks(1),diff(axTicks(1))/2 + axTicks(1)[-length(axTicks(1))]),h=c(axTicks(2),diff(axTicks(2))/2 + axTicks(2)[-length(axTicks(2))]),col="lightgrey")
+        points(x=data$popMean[xCol],y=data$popMean[yCol],pch=pch,col=col,cex=cex,lwd=lwd,...)
+        if(legend$plot) do.call("legend",legend)
       }
-      if(grid) abline(v=c(axTicks(1),diff(axTicks(1))/2 + axTicks(1)[-length(axTicks(1))]),h=c(axTicks(2),diff(axTicks(2))/2 + axTicks(2)[-length(axTicks(2))]),col="lightgrey")
-      points(x=data$popMean[xCol],y=data$popMean[yCol],pch=pch,col=col,cex=cex,lwd=lwd,...)
-      if(legend$plot) do.call("legend",legend)
     }    
     if(inherits(data,"NPAG")){
       if(yCol=="prob"){ #posterior plot
@@ -196,11 +258,16 @@ plot.PMfinal <- function(x,formula,include,exclude,ref=T,cex.lab=1.2,col,col.ref
         #default values and layout
         if(missing(col)) col <- "red"
         if(missing(lwd)) lwd <- 4
-        if(nsub>4){
-          par(mfrow=c(2,2))
-          devAskNewPage(T)
+        if(missing(layout)){
+          if(nsub>4){
+            par(mfrow=c(2,2))
+            devAskNewPage(T)
+          } else {
+            par(mfrow=c(ceiling(nsub/2),ifelse(nsub>2,2,nsub)))
+          }
         } else {
-          par(mfrow=c(ceiling(nsub/2),ifelse(nsub>2,2,nsub)))
+          par(mfrow=layout)
+          if(nsub>sum(layout)) {devAskNewPage(T)}
         }
         par(mar=c(5,5,4,2)+0.1)
         if(missing(ylim)) ylim <- c(0,max(data$postPoints$prob))
@@ -252,7 +319,7 @@ plot.PMfinal <- function(x,formula,include,exclude,ref=T,cex.lab=1.2,col,col.ref
   }
   #close device if necessary
   if(inherits(out,"list")) dev.off()
-  #restore graphical parameters
+  #restore layout
   par(.par)
   devAskNewPage(F)
   return(invisible(1))

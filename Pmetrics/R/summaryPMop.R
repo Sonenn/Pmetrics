@@ -92,7 +92,14 @@ summary.PMop <- function(x,digits=max(3,getOption("digits")-3),pred.type="post",
     
   } else {
     object <- object[object$outeq==outeq & object$pred.type==pred.type & object$icen==icen,]
-    sumresult <- sumPMopWrk(object)
+    if(all(is.na(object$obs))){
+      sumstat <- NA
+      pe <- data.frame(mpe=NA,mwpe=NA,mspe=NA,rmse=NA,percent_rmse=NA,mwspe=NA,bamspe=NA,bamwspe=NA)
+      wtd.t <- NA
+      result <- list(sumstat=sumstat,pe=pe,wtd.t=wtd.t)
+      class(result) <- c("summary.PMop","list")
+      return(result)
+    } else {sumresult <- sumPMopWrk(object)}
   }  
   
   class(sumresult) <- c("summary.PMop","list")

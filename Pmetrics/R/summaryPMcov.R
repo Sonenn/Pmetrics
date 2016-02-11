@@ -4,7 +4,7 @@
 #'
 #' @title Summarize Covariates and Bayesian Posterior Parameter Values
 #' @method summary PMcov
-#' @param x A PMop object made by \code{\link{makeOP}}.
+#' @param x A PMcov object made by \code{\link{makeCov}}.
 #' @param icen Summary function for covariates and posterior parameters. Default is \dQuote{median}, but can specify \dQuote{mean}.
 #' @return A data frame with the summary of the PMcov object for each subject's covariates and 
 #' Bayesian posterior parameter values.

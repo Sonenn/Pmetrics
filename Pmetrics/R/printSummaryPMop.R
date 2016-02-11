@@ -32,10 +32,14 @@ print.summary.PMop <- function(x, digits=max(3,getOption("digits")-3),...){
     if(!is.na(x$pe[1])) {printSumWrk(x,"")} else {cat("NA\n")}
     
   } else {
-    for(i in 1:length(x)){
-      if(!is.na(x[[i]][1])) {printSumWrk(x[[i]],paste("$",names(x)[i],sep=""))} else {cat("NA\n")}
+    if(all(unlist(sapply(x,is.na)))){cat("No observations.\n")
+    } else {    
+      for(i in 1:length(x)){
+        if(!is.na(x[[i]][1])) {printSumWrk(x[[i]],paste("$",names(x)[i],sep=""))} else {cat("NA\n")}
+      }
     }
+    
   }
-
+  
 }
 

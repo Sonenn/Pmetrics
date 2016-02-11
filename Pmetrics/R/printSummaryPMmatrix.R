@@ -23,43 +23,43 @@ print.summary.PMmatrix <- function(x){
   #   doseXid 
   #   obsXid 
   #   formula 
-  attach(x)
-  cat(paste("\nNumber of subjects:",nsub,"\n"))
-  cat(paste("Number of inputs:",ndrug,"\n"))
-  cat(paste("Number of outputs:",numeqt,"\n"))
-  for(i in 1:numeqt){
-    cat(paste("Total number of observations (outeq ",i,"): ",nobsXouteq[i],", with ",missObsXouteq[i]," (",sprintf("%.3f",missObsXouteq[i]/nobsXouteq[i]),"%) missing\n",sep=""))
+
+  cat(paste("\nNumber of subjects:",x$nsub,"\n"))
+  cat(paste("Number of inputs:",x$ndrug,"\n"))
+  cat(paste("Number of outputs:",x$numeqt,"\n"))
+  for(i in 1:x$numeqt){
+    cat(paste("Total number of observations (outeq ",i,"): ",x$nobsXouteq[i],", with ",x$missObsXouteq[i]," (",sprintf("%.3f",x$missObsXouteq[i]/x$nobsXouteq[i]),"%) missing\n",sep=""))
     
   }
-  cat(paste("Number of covariates:",ncov,"\n"))
+  cat(paste("Number of covariates:",x$ncov,"\n"))
   cat(paste("\nTHE FOLLOWING ARE MEAN (SD), MIN TO MAX\n",paste(rep("-",75),collapse=""),"\n",sep=""))
   cat("\nINPUTS\n")
-  for(i in 1:ndrug){
-    if(ndrug==1){
-      cat(paste("Number of doses per subject (input ",i,"): ",sprintf("%.3f",mean(ndoseXid,na.rm=T))," (",sprintf("%.3f",sd(ndoseXid,na.rm=T)),"), ",sprintf("%.3f",min(ndoseXid,na.rm=T))," to ",sprintf("%.3f",max(ndoseXid,na.rm=T)),"\n",sep=""))
-      cat(paste("Dose per subject (input ",i,"): ",sprintf("%.3f",mean(unlist(doseXid),na.rm=T))," (",sprintf("%.3f",sd(unlist(doseXid),na.rm=T)),"), ",sprintf("%.3f",min(unlist(doseXid),na.rm=T))," to ",sprintf("%.3f",max(unlist(doseXid),na.rm=T)),"\n",sep=""))
+  for(i in 1:x$ndrug){
+    if(x$ndrug==1){
+      cat(paste("Number of doses per subject (input ",i,"): ",sprintf("%.3f",mean(x$ndoseXid,na.rm=T))," (",sprintf("%.3f",sd(x$ndoseXid,na.rm=T)),"), ",sprintf("%.3f",min(x$ndoseXid,na.rm=T))," to ",sprintf("%.3f",max(x$ndoseXid,na.rm=T)),"\n",sep=""))
+      cat(paste("Dose per subject (input ",i,"): ",sprintf("%.3f",mean(unlist(x$doseXid),na.rm=T))," (",sprintf("%.3f",sd(unlist(x$doseXid),na.rm=T)),"), ",sprintf("%.3f",min(unlist(x$doseXid),na.rm=T))," to ",sprintf("%.3f",max(unlist(x$doseXid),na.rm=T)),"\n",sep=""))
     } else {
-      cat(paste("Number of doses per subject (input ",i,"): ",sprintf("%.3f",mean(ndoseXid[,i],na.rm=T))," (",sprintf("%.3f",sd(ndoseXid[,i],na.rm=T)),"), ",sprintf("%.3f",min(ndoseXid[,i],na.rm=T))," to ",sprintf("%.3f",max(ndoseXid[,i],na.rm=T)),"\n",sep=""))
-      cat(paste("Dose (input ",i,"): ",sprintf("%.3f",mean(unlist(doseXid[,i]),na.rm=T))," (",sprintf("%.3f",sd(unlist(doseXid[,i]),na.rm=T)),"), ",sprintf("%.3f",min(unlist(doseXid[,i]),na.rm=T))," to ",sprintf("%.3f",max(unlist(doseXid[,i]),na.rm=T)),"\n",sep=""))
+      cat(paste("Number of doses per subject (input ",i,"): ",sprintf("%.3f",mean(x$ndoseXid[,i],na.rm=T))," (",sprintf("%.3f",sd(x$ndoseXid[,i],na.rm=T)),"), ",sprintf("%.3f",min(ndoseXid[,i],na.rm=T))," to ",sprintf("%.3f",max(x$ndoseXid[,i],na.rm=T)),"\n",sep=""))
+      cat(paste("Dose (input ",i,"): ",sprintf("%.3f",mean(unlist(x$doseXid[,i]),na.rm=T))," (",sprintf("%.3f",sd(unlist(x$doseXid[,i]),na.rm=T)),"), ",sprintf("%.3f",min(unlist(x$doseXid[,i]),na.rm=T))," to ",sprintf("%.3f",max(unlist(x$doseXid[,i]),na.rm=T)),"\n",sep=""))
     }
   }
   cat("\nOUTPUTS\n")
-  for(i in 1:numeqt){
-    if(numeqt==1){
-      nobs <- unlist(nobsXid)
-      obs <- unlist(obsXid)
+  for(i in 1:x$numeqt){
+    if(x$numeqt==1){
+      nobs <- unlist(x$nobsXid)
+      obs <- unlist(x$obsXid)
     } else {
-      nobs <- unlist(nobsXid[,i])
-      obs <- unlist(obsXid[,i])
+      nobs <- unlist(x$nobsXid[,i])
+      obs <- unlist(x$obsXid[,i])
     }
     obs <- obs[obs!=-99]
     cat(paste("Number of obs per subject (outeq ",i,"): ",sprintf("%.3f",mean(nobs,na.rm=T))," (",sprintf("%.3f",sd(nobs,na.rm=T)),"), ",sprintf("%.3f",min(nobs,na.rm=T))," to ",sprintf("%.3f",max(nobs,na.rm=T)),"\n",sep=""))
     cat(paste("Observation per subject (outeq ",i,"): ",sprintf("%.3f",mean(obs,na.rm=T))," (",sprintf("%.3f",sd(obs,na.rm=T)),"), ",sprintf("%.3f",min(obs,na.rm=T))," to ",sprintf("%.3f",max(obs,na.rm=T)),"\n",sep=""))
   }
-  if(ncov>0){
+  if(x$ncov>0){
     cat("\nCOVARIATES\n")
-    for(i in 1:ncov){
-      cat(paste(covnames[i],": ",sprintf("%.3f",mean(unlist(cov[[i]]),na.rm=T))," (",sprintf("%.3f",sd(unlist(cov[[i]]),na.rm=T)),"), ",sprintf("%.3f",min(unlist(cov[[i]]),na.rm=T))," to ",sprintf("%.3f",max(unlist(cov[[i]]),na.rm=T)),"\n",sep=""))
+    for(i in 1:x$ncov){
+      cat(paste(x$covnames[i],": ",sprintf("%.3f",mean(unlist(x$cov[[i]]),na.rm=T))," (",sprintf("%.3f",sd(unlist(x$cov[[i]]),na.rm=T)),"), ",sprintf("%.3f",min(unlist(x$cov[[i]]),na.rm=T))," to ",sprintf("%.3f",max(unlist(x$cov[[i]]),na.rm=T)),"\n",sep=""))
     }
   }
   
@@ -69,6 +69,5 @@ print.summary.PMmatrix <- function(x){
   }
   cat(paste(paste(rep("-",75),collapse=""),"\nNote: See help(summary.PMmatrix) for accessing specific items by name.\n",sep=""))
   
-  detach(x)
-  
+
 } #end function

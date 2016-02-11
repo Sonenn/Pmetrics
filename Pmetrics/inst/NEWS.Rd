@@ -1,4 +1,67 @@
 \name{NEWS}
+\title{NEWS file for the Pmetrics package}
+
+
+\section{Changes in version 1.4.2}{
+
+\subsection{NEW FEATURES}{
+\itemize{
+\item NPAG can now use variables which are fixed in the population, but estimated
+\item Added ability to use external dataset for NPDE
+\item Added shrinkage calculation to final objects as final.x$shrinkage.  Also added this to the summary table in PMreport.
+\item makeNCA has new terminal argument (default=3) to control number of concentrations used for fitting k to terminal portion of time-concentration curve.
+\item Added weighting to MMopt.
+}
+\subsection{BUG FIXES}{
+\itemize{
+\item The mult argument works properly in plot.PMsim now.
+}
+}
+}
+
+
+
+\section{Changes in version 1.4.1}{
+
+\subsection{NEW FEATURES}{
+\itemize{
+\item Added a check to PMcheck for subjects with no observations
+\item Added binSize argument to plot.PMsim to bin simulated concentrations, which is useful for VPCs.
+}
+\subsection{BUG FIXES}{
+\itemize{
+\item Fixed plot, summary, and print PMop to handle objects with no observations
+\item PMtest updated for parallelized version of Pmetrics
+\item fixed SIMrun ID bug 
+}
+}
+}
+
+
+\section{Changes in version 1.4.0}{
+
+\subsection{NEW FEATURES}{
+\itemize{
+\item NPAG code parallelized over points introduced.  Default is serial for algebraic/exact and parallel for ODE models.  Can be overridden by user.
+\item Post-run report now includes Processing mode (parallel | serial) and run time.
+\item Added the ability to specify predInt argument to SIMrun as a list of multiple intervals to generate predictions.
+\item When making a csv file from simulated output, missing obsNoise now defaults to model file values, not 0.
+\item Added PMmb2csv to convert old .mb or USC*PACK files to .csv format
+\item Added setPMoptions and getPMoptions for session options.  Currently they are sep (datafile field separator which can be "," or ";") and dec (decimal separator which can be "." or ",").  Removed PMreadDefaults and PMwriteDefaults as Defaults package no longer supported.
+}
+}
+\subsection{BUG FIXES}{
+\itemize{
+\item Bug with ADDL and II in NM2PM fixed
+\item Allowed makeFinal to work with older NPdata objects that don't have postden items
+\item Changed incorrectly formatted values <1E-100 to be 0 in output files
+\item Fixed makeFinal and makePost to handle one subject data files properly
+\item Fixed PMwrk2csv when no assay error coefficients present
+\item General updating of help files, which isn't really a bug!
+\item Fixed bug in simulator output when values very near 0 didn't format properly
+}
+}
+}
 
 \section{Changes in version 1.3.2}{
 
@@ -176,7 +239,6 @@
 }
 }
 
-\title{NEWS file for the Pmetrics package}
 \section{Changes in version 1.2.2}{
 
 \subsection{NEW FEATURES}{
