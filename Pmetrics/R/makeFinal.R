@@ -65,7 +65,7 @@ makeFinal <- function(data){
       popCov <- matrix(NA,ncol=data$nvar,nrow=data$nvar)
       for (i in 1:data$nvar){
         for (k in 1:data$nvar){
-          popCov[i,k] <- sum(data$corden[,i] * data$corden[,k] * data$corden[,data$nvar+1])*wParVol - popMean[i]*popMean[k]
+          popCov[i,k] <- sum(data$corden[,i] * data$corden[,k] * data$corden[,data$nvar+1]*wParVol) - popMean[i]*popMean[k]
         }  
       }
       if (any(popCov==0)) {popCor <- NA} else {popCor <- cov2cor(popCov)}
@@ -93,24 +93,7 @@ makeFinal <- function(data){
       postPoints$id <- data$sdata$id[postPoints$id]
     } else { postPoints <- NA}
     
-    #     if(data$icyctot>0) {
-    #       popMedian <- data$iaddl[6,,data$icyctot]
-    #     } else {
-    #       calcWtMed <- function(x,prob){
-    #         x <- cbind(x,prob)
-    #         if(nrow(x)==1){return(x[1])}
-    #         x <- x[order(x[,1]),]
-    #         xsum <- cumsum(x[,2])
-    #         xmedindex <- min(which(xsum>0.5))
-    #         xmed <- x[xmedindex,1]
-    #         xnint <- max(c(100,2*data$nsub))
-    #         xint <- diff(range(x[,1]))/xnint
-    #         xmed <- xmed - (xsum[xmedindex] - 0.5)/xnint*xint
-    #         return(xmed)        
-    #       }
-    #       popMedian <- apply(popPoints[,1:(ncol(popPoints)-1)],2,calcWtMed,popPoints$prob)
-    #     }
-    #     names(popMedian) <- data$par
+    
     
     
     pointSum <- summary.PMfinal(popPoints)
@@ -132,6 +115,19 @@ makeFinal <- function(data){
     
     postVar <- data.frame(id=data$sdata$id,data$bsd^2)
     
+    if(!all(is.na(postPoints))){
+      postCov <- array(NA,dim=c(data$nvar,data$nvar,data$nsub),
+                       dimnames=list(par1=data$par,par2=data$par,subj=unique(data$sd$id)))
+      postCor <- array(NA,dim=c(data$nvar,data$nvar,data$nsub),
+                       dimnames=list(par1=data$par,par2=data$par,subj=unique(data$sd$id)))
+      for(i in 1:data$nsub){
+        temp2 <- postPoints[postPoints$id==data$sdata$id[i],]
+        ret <- cov.wt(temp2[,3:(2+data$nvar)],wt=temp2$prob,cor=T,method="ML")
+        postCov[,,i] <- ret$cov
+        postCor[,,i] <- ret$cor
+      }
+    }
+    
     
     #shrinkage
     varEBD <- apply(postVar[,-1],2,mean)
@@ -143,10 +139,12 @@ makeFinal <- function(data){
       popRanFix <- data$valranfix
       names(popRanFix) <- data$parranfix
     } else {popRanFix <- NULL}
-
+    
     
     outlist <- list(popPoints=popPoints,popMean=popMean,popSD=popSD,popCV=popCV,popVar=popVar,
-                    popCov=popCov,popCor=popCor,popMedian=popMedian,popRanFix=popRanFix,postMean=postMean,postSD=postSD,postVar=postVar,shrinkage=sh.DF,gridpts=gridpts,nsub=data$nsub,ab=data$ab,postPoints=postPoints)
+                    popCov=popCov,popCor=popCor,popMedian=popMedian,popRanFix=popRanFix,
+                    postMean=postMean,postSD=postSD,postVar=postVar,postCov=postCov,postCor=postCor,
+                    shrinkage=sh.DF,gridpts=gridpts,nsub=data$nsub,ab=data$ab,postPoints=postPoints)
     class(outlist)<-c("PMfinal","NPAG","list")
     return(outlist)
   }

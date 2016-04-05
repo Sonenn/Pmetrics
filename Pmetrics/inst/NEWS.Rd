@@ -11,10 +11,15 @@
 \item Added shrinkage calculation to final objects as final.x$shrinkage.  Also added this to the summary table in PMreport.
 \item makeNCA has new terminal argument (default=3) to control number of concentrations used for fitting k to terminal portion of time-concentration curve.
 \item Added weighting to MMopt.
+\item Removed dependency on rJava for PMcheck
+\item Added ability to simulate with both covariates and split.  The mean covariate value is added to each support point in this case.
+\item makePTA with target.type = 'time' now MUCH faster thanks to improvements by Jan Strojil
+\item Added the ability to makePTA to recalculate success threshold and redefine labels using existing PMpta object
 }
 \subsection{BUG FIXES}{
 \itemize{
 \item The mult argument works properly in plot.PMsim now.
+\item Fixed bug in makePTA and simulated targets that miscalculated success
 }
 }
 }

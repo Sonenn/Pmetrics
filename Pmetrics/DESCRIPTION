@@ -29,7 +29,7 @@ Suggests:
     npde,
     Rcpp,
     shiny,
-    xlsx,
+    openxlsx,
     Matrix,
     rjson
 Roxygen: list(wrap = FALSE)

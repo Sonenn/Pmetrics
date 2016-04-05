@@ -11,7 +11,8 @@ makePTA(simdata, simlabels, targets, target.type, success, outeq = 1,
 \item{simdata}{A vector of simulator output filenames, e.g. c(\dQuote{simout1.txt},\dQuote{simout2.txt}),
 with wildcard support, e.g. \dQuote{simout*} or \dQuote{simout?}, or
 a list of PMsim objects made by \code{\link{SIMparse}} with suitable simulated regimens and observations.  The number and times of simulated
-observations does not have to be the same in all objects.}
+observations does not have to be the same in all objects.  Alternatively a \emph{PMpta} object previously made with
+\code{makePTA} can be passed for recalculation with a new success value or simlabels.}
 
 \item{simlabels}{Optional character vector of labels for each simulation.  Default is \code{c(\dQuote{Regimen 1}, \dQuote{Regimen 2},...)}.}
 
@@ -61,9 +62,11 @@ Calculates the Percent Target Attainment (PTA)
 \details{
 \code{makePTA} will calculate the PTA for any number of simulations, targets and definitions of success.
 Simulations typically differ by dose, but may differ by other features such as children vs. adults.
+If a \emph{PMpta} object is passed to the function as the \code{simdata}, the only other parameter required is success.
+If desired, a new set of simlabels can be specified; all other parameters will be ignored.
 }
 \author{
-Michael Neely
+Michael Neely and Jan Strojil
 }
 \seealso{
 \code{\link{plot.PMpta}}, \code{\link{SIMparse}}

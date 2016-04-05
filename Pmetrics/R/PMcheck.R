@@ -111,10 +111,10 @@
 
 PMcheck <- function(data,model,fix=F,quiet=F){
   
-  if(length(grep("xlsx",installed.packages()[,1]))==0){
-    install.packages("xlsx",repos="http://cran.cnr.Berkeley.edu",dependencies=T)
+  if(length(grep("openxlsx",installed.packages()[,1]))==0){
+    install.packages("openxlsx",repos="http://cran.cnr.Berkeley.edu",dependencies=T)
   }
-  xlsx.installed <- require(xlsx)
+  openxlsx.installed <- require(openxlsx)
   #here's the subfunction to check for errors
   errcheck <- function(data2,model,quiet=quiet){
     err <- list(colorder=list(msg="OK - The first 14 columns are appropriately named and ordered.",results=NA,col=NA,code=NA),
@@ -231,7 +231,7 @@ PMcheck <- function(data,model,fix=F,quiet=F){
       attr(err,"error") <- -1
     }
     
-
+    
     #check for time=0 for each subject as first record
     t <- which(tapply(data2$time,data2$id,function(x) x[1])!=0)
     t2 <- match(names(t),data2$id)
@@ -296,7 +296,7 @@ PMcheck <- function(data,model,fix=F,quiet=F){
     }
     
     #create the color coded Excel file using code from Patrick Nolain
-    if(xlsx.installed){
+    if(openxlsx.installed){
       # Definition of a table of n types of errors, each one with 'code' and 'color' properties
       errorsTable <- data.frame(comment=c("ID > 11 characters",
                                           "Missing EVID",
@@ -338,31 +338,25 @@ PMcheck <- function(data,model,fix=F,quiet=F){
         errColor <- "#FFFF00"  #yellow
         errColor2 <- "#00FF00"  #green
         
+        errStyle1 <- createStyle(fgFill=errColor)
+        errStyle2 <- createStyle(fgFill=errColor2)
+        
+        
         # Adding a new Worksheet
-        sheet <- createSheet(wb, sheetName="errors")
+        sheet <- addWorksheet(wb, sheetName="errors")
         
         # Writing out the header of the Pmetrics data file : version line and data frame column names
-        header <- CellBlock(sheet, 1, 1, 2, numcol)
-        CB.setRowData(header, pmVersion, rowIndex=1, colOffset=0)         # POPDATA...
-        CB.setRowData(header, formattedCols, rowIndex=2, colOffset=0)   # #ID,EVID,...
-        
-        # Defining the block region where outputting the data,
-        # starting from row 3 (i.e. following the header), column 1
-        cb <- CellBlock(sheet, 3, 1, nrow(data2), numcol)
-        
-        
-        # Fill the cell block, starting from its first row & column
-        addDataFrame(data2,sheet,row.names=F,col.names=F,startRow=3,startColumn=1)
-        
+        writeData(wb, sheet, pmVersion, xy=c(1,1))         # POPDATA...
+        writeData(wb, sheet, t(formattedCols), xy=c(1,2),colNames=F)   # #ID,EVID,...
+      
+      
         # Highlight the cells with errors
         for(i in 1:nrow(errors))
         {  
           thisErr <- errors[i,]
-          
-          comment <- errorsTable[errorsTable$code == thisErr$code,]$comment
+          comment <- createComment(errorsTable[errorsTable$code == thisErr$code,]$comment,author="Pmetrics",visible=F)
           colIndex <- thisErr$column
           rowIndex <- thisErr$row
-          block <- cb
           
           
           #special highlighting - overwrite some values
@@ -370,11 +364,8 @@ PMcheck <- function(data,model,fix=F,quiet=F){
             colIndex <- (numfix+1):numcol
           } 
           if(errorsTable$comment[match(thisErr$code,errorsTable$code)]=="Column with non-numeric rows (green)"){ #special for non-numeric columns
-            block <- header
             rowIndex <- 2
             colIndex <- thisErr$row    #because of the way the error is detected    
-            errRow <- getRows(sheet,rowIndex=2)
-            errCell <- getCells(row=errRow,colIndex=colIndex)
             
             is.char.num <- function(x){
               if(!is.na(x) && suppressWarnings(is.na(as.numeric(x)))){
@@ -383,19 +374,22 @@ PMcheck <- function(data,model,fix=F,quiet=F){
             }
             
             #find the non-numeric cells in a column
-            rowIndex2 <- which(sapply(data2[,colIndex],is.char.num))
+            rowIndex2 <- which(sapply(data2[,colIndex],is.char.num))+2
             #highlight them
-            CB.setFill(cb, Fill(foregroundColor=errColor2, backgroundColor=errColor2),rowIndex = rowIndex2, colIndex = colIndex)
+            addStyle(wb,sheet,errStyle2,rowIndex2,colIndex)
             
           } else { #not non-numeric column error
-            errRow <- getRows(sheet,rowIndex=thisErr$row+2)
-            errCell <- getCells(row=errRow,colIndex=thisErr$column)
+            rowIndex <- thisErr$row+2
+            colIndex <- thisErr$column
           }
           
           #add the highlighting and comments
-          CB.setFill(block, Fill(foregroundColor = errColor, backgroundColor=errColor),rowIndex = rowIndex, colIndex = colIndex)
-          lapply(errCell,function(x) createCellComment(cell=x,string=comment,author="Pmetrics"))
+          addStyle(wb,sheet,errStyle1,rowIndex,colIndex)
+          writeComment(wb,sheet,col=colIndex,row=rowIndex,comment=comment)
         }
+        
+        #Add the data
+        writeData(wb, sheet, data2, rowNames=F, colNames=F, xy=c(1,3))
         
         # Check for NA values and set '.' as cells content 
         for(i in 1:nrow(data2))
@@ -404,14 +398,14 @@ PMcheck <- function(data,model,fix=F,quiet=F){
           {
             if(is.na(data2[i,j]))
             {
-              CB.setRowData(cb, '.', rowIndex=i, colOffset=j-1)
+              suppressWarnings(writeData(wb,sheet,".", xy=c(j,i+2)))
             }
           }
         }
         
         
         # Save the workbook ...
-        saveWorkbook(wb, file = "errors.xlsx")
+        saveWorkbook(wb, file = "errors.xlsx", overwrite=T)
       } #end writing of datafile with highlighted errors
       
     } else {cat("Unable to write errors.xlsx;\n connect to internet to download and install xlsx package.\n")}
@@ -503,7 +497,7 @@ PMcheck <- function(data,model,fix=F,quiet=F){
     if(length(grep("FAIL",err$obsOuteq$msg))>0){
       report <- c(report,paste("Observation records (evid=0) must have OUTEQ. Fix manually."))    
     }
-
+    
     #Insert dummy doses of 0 for those missing time=0 first events
     if(length(grep("FAIL",err$T0$msg))>0){
       T0 <- data2[err$T0$results,]

@@ -6,8 +6,8 @@
 \usage{
 SIMrun(poppar, limits = NULL, model = "model.txt", data = "data.csv",
   split = F, include, exclude, nsim = 1000, predInt = 0, covariate,
-  seed = -17, ode = -4, obsNoise, doseTimeNoise = rep(0, 4),
-  doseNoise = rep(0, 4), obsTimeNoise = rep(0, 4), makecsv, outname,
+  usePost = F, seed = -17, ode = -4, obsNoise, doseTimeNoise = rep(0,
+  4), doseNoise = rep(0, 4), obsTimeNoise = rep(0, 4), makecsv, outname,
   clean = T, silent = F, nocheck = F)
 }
 \arguments{
@@ -97,6 +97,12 @@ or specify your own, the covariance matrix in poppar will be augmented by the co
 The parameter plus covariate means and this augmented covariance matrix will be used for simulations.
 In effect, all non-fixed covariates are moved into the #Primary block of the model file to become parameters that are simulated.
 In fact, a copy of your model file is made with a \dQuote{c} prepended to the model name (e.g. \dQuote{model.txt} -> \dQuote{c_model.txt}).}
+
+\item{usePost}{Boolean argument.  Only applicable with \code{poppar} is an NPAG \emph{PMfinal} object.
+If so, and \code{usePost} is \code{TRUE}, the posterior for each subject (modified by \code{include} or \code{exclude}) in \code{poppar}
+will be used to simulate rather than the population prior.  The number of subjects in the template \code{data} file
+must be the same.  Normally one would use the same data file as used to make the model final parameter distribution in \code{poppar},
+but if different templates are desired, the number must be equivalent to the number of included subjects from whom the posteriors are obtained.}
 
 \item{seed}{The seed for the random number generator.  For \code{nsub} > 1, should be a vector of length equal to \code{nsub}.
 Shorter vectors will be recycled as necessary.  Default is -17.}
