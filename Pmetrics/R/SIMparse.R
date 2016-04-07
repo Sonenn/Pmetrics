@@ -2,11 +2,13 @@
 #'
 #' For \code{file} specification \dQuote{?} will be matched by just a single numeral or character; \dQuote{*} will be
 #' matched by any number of consecutive alphanumeric characters.  Examples include \code{file='simout1.txt,simout2.txt,simout3.txt'},
-#' \code{file='simout?.txt'} and \code{file='sim*.txt'}.  All three will find the files simout1.txt,
-#' simout2.txt, and simout3.txt in the working directory.  The second example would also find simout4.txt, etc.  The third
-#' example would also find sim_1.txt if that existed.  Note that to combine simulator output files, the numbers of simulated profiles may differ.
+#' \code{file='simout?.txt'} and \code{file='sim*.txt'}.All three will find the files simout1.txt,
+#' simout2.txt, and simout3.txt in the working directory. The second example would also find simout4.txt, etc.  The third 
+#' example would also find sim_1.txt if that existed. 
+#' Note that to combine simulator output files, the numbers of simulated profiles may differ.
 #' The number of outputs and times of observations also may differ, although combining these may lead to
-#' strange plots since not all profiles have the same observations.  
+#' strange plots since not all profiles have the same observations. 
+#' For parallel execution, the function requires packages 'doParallel' and 'foreach'. If not installed, it will try to install, failing that it will run in serial mode. 
 #'
 #' @title Parse Pmetrics Simulator Output
 #' @param file An output file or files of the simulator in the current working directory, or the full
@@ -23,6 +25,8 @@
 #' will be a list of PMsim objects, which can be plotted or otherwise accessed using standard list
 #' referencing, e.g. simlist[[1]], simlist[[2]], etc.
 #' @param silent Suppress messages
+#' @param parallel Runs in parallel mode.  Defaults to true if multiple files are to be parsed, otherwise false.
+#' Can be overridden by specifying \code{TRUE} or \code{FALSE}.
 #' @return If one file is parsed or multiple files are parsed and combined, the return will be a list with five items, of class \emph{PMsim}.
 #' If multiple files are parsed and not combined, then the return will be a list of \emph{PMsim} objects.
 #' \item{obs }{An data frame of simulated observations with 4 columns: id, time, out, outeq.
@@ -46,46 +50,8 @@
 #' @author Michael Neely
 #' @seealso \code{\link{SIMrun}}
 
-SIMparse <- function(file,include,exclude,combine=F,silent=F){
-  if (missing(file)){
-    cat("Please provide filename of Pmetrics simulation output file(s).\n")
-    return()
-  }
-  #extract pattern from strings
-  strparse<-function(pattern,x) {
-    match <- regexpr(pattern,x)
-    start <- match[1]
-    stop <- match[1]+attr(match,"match.length")-1
-    return(substr(x,start,stop))
-  }
-  #separate files if more than one
-  files <- unlist(strsplit(file,","))
-  #remove leading and trailing spaces
-  files <- sub("^[[:blank:]]*","",files)
-  files <- sub("[[:blank:]]*$","",files)
-  allfiles <- Sys.glob(files)
-  simnum <- as.numeric(sapply(allfiles,function(x) strparse("[[:digit:]]+",x)))
-  allfiles <- allfiles[order(simnum)]
-  if(!missing(include)){
-    allfiles <- allfiles[include]
-  }
-  if(!missing(exclude)){
-    allfiles <- allfiles[-exclude]
-  }
-  
-  nfiles <- length(allfiles)
-  if (nfiles==0) {stop("No files found.\n")}
-  
-  #initialize return objects
-  simlist <- list()
-  if(!silent){
-    cat(paste("\nProcessing ",nfiles," simulated data file(s)\n",sep=""))
-    flush.console()
-  }
-  if(!silent) {pb <- txtProgressBar(min = 0, max = nfiles, style = 3)}
-  
-  for(n in 1:nfiles){  
-    if(!silent) {setTxtProgressBar(pb, n)}
+SIMparse <- function(file,include,exclude,combine=F,silent=F, parallel){
+  processfile <- function(n) {
     out <- readLines(allfiles[n])
     nsim <- as.numeric(strparse("[[:digit:]]+",out[grep(" THE NO. OF SIMULATED SUBJECTS",out)]))
     nout <- as.numeric(strparse("[[:digit:]]+",out[grep(" THE NO. OF OUTPUT EQUATIONS",out)]))
@@ -93,7 +59,6 @@ SIMparse <- function(file,include,exclude,combine=F,silent=F){
     i <- grep("CONTAIN THE SIMULATED OBSERVED$",out)
     times <- as.numeric(scan(allfiles[n],skip=i+6,n=nobs+1,what="character",quiet=T)[-1])
     
-    #     obs <- array(dim=c(nout,nsim,nobs),dimnames=list(outeq=1:nout,subj=1:nsim,time=times))
     
     #get compartment amounts and outeq concentrations for each output
     #places for compartment amounts
@@ -131,12 +96,6 @@ SIMparse <- function(file,include,exclude,combine=F,silent=F){
                       }))),
                       outeq=rep(1:nout,each=nsim*nobs))
     obs$out[obs$out==-99] <- NA
-    
-    
-    
-    #     for (k in 1:nout){
-    #       obs[k,,] <- matrix(scan(allfiles[n],n=nsim*(nobs+1),skip=j[k],quiet=T),ncol=nobs+1,byrow=T)[,-1]
-    #     }
     
     #get simulated parameter values
     
@@ -178,9 +137,92 @@ SIMparse <- function(file,include,exclude,combine=F,silent=F){
     names(totalMeans) <- parNames[-1]
     if(length(parValues)>2) dimnames(totalCov) <- list(parNames[-1],parNames[-1])    
     
-    simlist[[n]] <- list(obs=obs,amt=amt,parValues=parValues,totalSets=totalSets,totalMeans=totalMeans,totalCov=totalCov)
+    return(list(obs=obs,amt=amt,parValues=parValues,totalSets=totalSets,totalMeans=totalMeans,totalCov=totalCov))
+  } # end of processfile function
+  
+  #  starttime <- proc.time()
+  if (missing(file)){
+    cat("Please provide filename of Pmetrics simulation output file(s).\n")
+    return()
   }
-  if(!silent) {close(pb)}
+  #extract pattern from strings
+  strparse<-function(pattern,x) {
+    match <- regexpr(pattern,x)
+    start <- match[1]
+    stop <- match[1]+attr(match,"match.length")-1
+    return(substr(x,start,stop))
+  }
+  
+  #see if a wildcard was used
+  if (length(grep("\\?",file))>0 | length(grep("\\*",file)) >0) {wildcard <- T} else {wildcard <- F}
+  #separate files if more than one
+  files <- unlist(strsplit(file,","))
+  #remove leading and trailing spaces
+  files <- sub("^[[:blank:]]*","",files)
+  files <- sub("[[:blank:]]*$","",files)
+  allfiles <- unique(Sys.glob(files)) # unique to exclude duplicates
+  simnum <- as.numeric(sapply(allfiles,function(x) strparse("[[:digit:]]+",x)))
+  allfiles <- allfiles[order(simnum)]
+  if(!missing(include)){
+    allfiles <- allfiles[include]
+  }
+  if(!missing(exclude)){
+    allfiles <- allfiles[-exclude]
+  }
+  
+  nfiles <- length(allfiles)
+  if (nfiles==0) {stop("No files found.\n")}
+  if (missing(parallel)){
+    if(nfiles>1){parallel <- T} else {parallel <- F}
+  } 
+  
+  if (parallel){
+    if (length(grep("doParallel", installed.packages()[, 1])) ==
+        0) {
+      install.packages("doParallel", repos = "http://cran.cnr.Berkeley.edu", dependencies = T)
+    }
+    if (length(grep("foreach", installed.packages()[, 1])) ==
+        0) {
+      install.packages("foreach", repos = "http://cran.cnr.Berkeley.edu", dependencies = T)
+    }
+    doParallel.installed <- require(doParallel, warn.conflicts = F, quietly = T)
+    foreach.installed <- require(foreach, warn.conflicts = F, quietly = T)
+    if (!doParallel.installed | !foreach.installed) {
+      warning("Required package failed to be installed. SIMparse will run in serial mode.\n", call. = F, immediate. = !silent)
+      parallel <- F
+    } else {
+      no_cores <- detectCores()
+    }
+  }
+  
+  
+  
+  #initialize return objects
+  simlist <- list()
+  if(!silent){
+    cat(paste("\nProcessing ",nfiles," simulated data file(s)",sep=""))
+    if (parallel) cat(" in parallel on ",no_cores, " cores.", sep = "")
+    cat("\n")
+    flush.console()
+  }
+  if(!silent & !parallel) {pb <- txtProgressBar(min = 0, max = nfiles, style = 3)}
+  
+  for (n in 1:nfiles) {
+    if ((n>1) & wildcard) if(file.mtime(allfiles[n]) < file.mtime(allfiles[n-1])) warning(paste("File ", allfiles[n], " is older than ", allfiles[n-1], ". Possible leftover files from previous SIMrun?", sep = ""), call. = F)
+  }
+  
+  if (parallel) {
+    cl <- makeCluster(no_cores)
+    registerDoParallel(cl)
+    simlist <- foreach(n = 1:nfiles, .verbose = F) %dopar% {processfile(n)}
+    stopCluster(cl)
+  } else {
+    for (n in 1:nfiles) {
+      simlist[[n]] <- processfile(n)
+      if(!silent) {setTxtProgressBar(pb, n)}
+    }
+    if(!silent) {close(pb)}
+  }
   
   #combine obs if requested
   if(combine & nfiles>1){
@@ -205,18 +247,21 @@ SIMparse <- function(file,include,exclude,combine=F,silent=F){
   if(nfiles>1){ #more than one file
     if(combine) { #combined
       class(simlist) <- c("PMsim","list")
-      message <- paste("\nThe following files were successfully parsed and combined:\n",paste(allfiles,collapse="\n"),"\n",sep="")
+      message <- paste("\nThe following files were successfully parsed and combined: ",paste(allfiles,collapse=", "),"\n",sep="")
     } else {      #not combined
       simlist <- lapply(simlist,function(x) {class(x) <- c("PMsim","list");x})
-      message <- paste("\nThe following files were successfully parsed as a list:\n",paste(allfiles,collapse="\n"),"\n",sep="")
+      message <- paste("\nThe following files were successfully parsed as a list: ",paste(allfiles,collapse=", "),"\n",sep="")
     }
   } else {  #only one file
     simlist <- simlist[[1]]
     class(simlist) <- c("PMsim","list")
-    message <- paste(paste("\nThe following file was successfully parsed:\n",paste(allfiles,collapse="\n"),"\n",sep=""))
+    message <- paste(paste("\nThe following file was successfully parsed: ",paste(allfiles,collapse=", "),"\n",sep=""))
   } 
   
+  Rprof(NULL)
+  #  runningtime <- proc.time()-starttime
   if(!silent) cat(message)
+  #  if(!silent) cat(message,"Running time: ", runningtime[3], sep="")
   return(simlist)
   
 }
