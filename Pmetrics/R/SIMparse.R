@@ -76,8 +76,6 @@ SIMparse <- function(file,include,exclude,combine=F,silent=F){
   nfiles <- length(allfiles)
   if (nfiles==0) {stop("No files found.\n")}
   
-  
-  
   #initialize return objects
   simlist <- list()
   if(!silent){
