@@ -18,6 +18,9 @@
 #' @seealso \code{\link{makePTA}}
 
 
+#NOTE - success can be either new success to compare using DIFF (e.g. difference in success for 100 vs 40 above MIC)
+#OR it can be success of TIME INSIDE INTERVAL!!!
+
 combinePTA <- function(pta1, pta2, targets1, targets2, success){
   if(missing(pta1)) stop("You need to specify at least one PMpta object.", call. = F)
   if(!inherits(pta1,"PMpta")) {
@@ -68,15 +71,37 @@ combinePTA <- function(pta1, pta2, targets1, targets2, success){
     stop("'targets2' conflicts with 'targets1'.", call. = F)
   }
       
-  simnum1 <- max(pta1$results$simnum)
+  nsim1 <- max(pta1$results$simnum)
   if (!missing(pta2)) {
-    simnum2 <- max(pta2$results$simnum)
-    if (simnum2 != simnum1) {
+    nsim2 <- max(pta2$results$simnum)
+    if (nsim1 != nsim2) {
       cat("PMpta objects contain different numbers of simulations, cannot combine.", sep = "")
       stop("Numbers of simulations must match.", call. = F)
     }
   }
+
+  nprofile1 <- max(pta1$results$id)
+  if (!missing(pta2)) {
+    nprofile2 <- max(pta2$results$id)
+    if (nprofile1 != nprofile2) {
+      cat("PMpta objects contain different numbers of profiles, cannot combine.", sep = "")
+      stop("Numbers of profiles must match.", call. = F)
+      # this should check number of profiles per simulation as they could be different!
+    }
+  }
+
+  if (!missing(pta2) & sametype) {
+    if any(pta1$results$pdi == pta2$results$pdi) {
+      cat("PMpta objects are of same type but contain different PDI results.", sep = "")
+      stop("PMpta objects of same type must contain the same results.", call. = F)
+      # if ptas are of the same type, we can check if they are the same (which they should be)
+      # there is really no reason to have 2 PMpta objects of the same type since the targets 
+      # could and should be contained in a single object in this case
+    }
+  }
   
+  
+    
   browser() 
   if(missing(pta2))
   
