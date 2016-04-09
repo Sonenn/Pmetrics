@@ -166,7 +166,7 @@
 #' setwd(wd)
 #' }
 
-mySIMrun <- function(poppar,limits=NULL,model="model.txt",data="data.csv",split=F,
+SIMrun <- function(poppar,limits=NULL,model="model.txt",data="data.csv",split=F,
                    include,exclude,nsim=1000,predInt=0,covariate,usePost=F,
                    seed=-17,ode=-4,
                    obsNoise,doseTimeNoise=rep(0,4),doseNoise=rep(0,4),obsTimeNoise=rep(0,4),
