@@ -141,6 +141,7 @@
 #' be deleted. Defaults to \code{True}.  This is primarily used for debugging.
 #' @param silent Boolean operator controlling whether a model summary report is given.  Default is \code{FALSE}.
 #' @param nocheck Suppress the automatic checking of the data file with \code{\link{PMcheck}}.  Default is \code{FALSE}.
+#' @param overwrite Cleans up any old output files without asking before creating new output. Default is \code{FALSE}.
 #' @return No value is returned, but simulated file(s) will be in the working directory.
 #' @author Michael Neely
 #' @seealso \code{\link{SIMparse}}
@@ -169,7 +170,7 @@ SIMrun <- function(poppar,limits=NULL,model="model.txt",data="data.csv",split=F,
                    include,exclude,nsim=1000,predInt=0,covariate,usePost=F,
                    seed=-17,ode=-4,
                    obsNoise,doseTimeNoise=rep(0,4),doseNoise=rep(0,4),obsTimeNoise=rep(0,4),
-                   makecsv,outname,clean=T,silent=F,nocheck=F){
+                   makecsv,outname,clean=T,silent=F,nocheck=F,overwrite=F){
   
   #make sure model file name is <=8 characters
   if(!FileNameOK(model)) {endNicely(paste("Model file name must be 8 characters or fewer.\n"),model=-99,data)}
@@ -685,8 +686,27 @@ SIMrun <- function(poppar,limits=NULL,model="model.txt",data="data.csv",split=F,
     
   } #end getSimPrior function
   
-  #other simulation arguments
+  #check if output files already exist
   if (missing(outname)){outname <- "simout"}
+  oldfiles <- Sys.glob(paste(outname,"*", sep=""))
+  nexisting <- length(oldfiles)
+  if (nexisting > 0) {
+    if (overwrite) {
+      file.remove(oldfiles)
+    } else {
+      cat("The working directory already contains ", nexisting," files matching the output name (from ",format(file.mtime(oldfiles[[1]]), format="%a %b %d %Y"),").", sep="")
+      ans <- readline(cat("\nWhat would you like to do?\n1) delete all existing files '", outname, "*.txt'\n2) prefix existing files with 'old_' (overwriting any that may already exist)\n3) abort function", sep=""))
+      if (ans == 1) {
+        file.remove(oldfiles)
+      } 
+      else if (ans==2) {
+        file.rename(oldfiles, paste("old_",oldfiles,sep = ""))
+      } 
+      else stop("Function aborted, please re-run with a different output name.", call.=F)
+    }
+  }
+  
+  #other simulation arguments
   if(identical(length(obsNoise),length(asserr))){
     obsNoise[is.na(obsNoise)] <- asserr[is.na(obsNoise)] #try to set any missing obsNoise to asserr from model file
   } else {obsNoise[is.na(obsNoise)] <- 0} #but if can't, set any missing obsNoise to 0
