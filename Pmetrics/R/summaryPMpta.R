@@ -25,9 +25,9 @@ summary.PMpta <- function(x,ci=0.95,...){
   require(reshape2)
   simTarg <- 1+as.numeric(attr(x,"simTarg")) #1 if missing or set, 2 if random
   if(length(simTarg)==0) simTarg <- 1
+  nsim <- length(unique(x$results$simnum))
   
   if(simTarg==1){ #set targets
-    nsim <- length(unique(x$results$simnum))
     ntarg <- length(unique(x$results$target))
     pdi.median <- tapply(x$results$pdi,list(x$results$target,x$results$simnum),median,na.rm=T)
     pdi.lower <- tapply(x$results$pdi,list(x$results$target,x$results$simnum),quantile,probs=0.5-ci/2,na.rm=T)

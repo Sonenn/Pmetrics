@@ -190,8 +190,8 @@ makePTA <- function(simdata,simlabels,targets,
     
     
     # if free.fraction not 1, multiply by free.fraction
-    if (free.fraction != 1) {simdata <- lapply(1:nsim, function(x) {simdata[[x]]$obs <- simdata[[x]]$obs * free.fraction ; simdata[[x]]})} 
-    
+    if (free.fraction != 1) {simdata <- lapply(1:nsim, function(x) {simdata[[x]]$obs$out <- simdata[[x]]$obs$out * free.fraction ; simdata[[x]]})} 
+
     if (!simTarg & target.type == "time") maxpb <- nsim * ntarg else maxpb <- nsim
     
     pb <- txtProgressBar(min = 0, max = maxpb, style = 3)
@@ -384,7 +384,7 @@ makePTA <- function(simdata,simlabels,targets,
     
     if (!exists("sim.labels")) sim.labels <- attr(simdata, "simlabels")
     simTarg <- attr(simdata, "simTarg")
-    target.type =  attr(simdata, "type")
+    target.type <- attr(simdata, "type")
     
     cat("A PMpta object of type \"", target.type, "\" and original success threshold of ", attr(simdata, "success"), " will be used for calculations.\n",  sep = "")
     cat("Recalculating with a new success threshold of ", success, ".\n",  sep = "")
