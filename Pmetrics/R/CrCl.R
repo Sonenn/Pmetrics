@@ -205,11 +205,12 @@ CrCl <- function(formula, creat, BW, age, male, black, BUN, albumin, preterm, he
     if (missing(male) & formula!="Schwartz"){
       stop("Missing sex.", call. = F)
     }
-    if (SI & mean(creat)<10){
-      warning("Creatinine levels are very low, are you sure they are in SI units?", call. = F)
-    }
-    if (!SI & mean(creat)>10){
-      warning("Creatinine levels are very high, are you sure they are in US units?", call. = F)
+    if (SI){
+      if (mean(creat)<10) warning("Creatinine levels are very low, are you sure they are in umol/l?", call. = F)
+      if (!missing(albumin) & mean(albumin)<10) warning("Albumin levels are very low, are you sure they are in g/l?", call. = F)
+    } else {
+      if (mean(creat)>10) warning("Creatinine levels are very high, are you sure they are in mg/dL?", call. = F)
+      if (!missing(albumin) & mean(albumin)>10) warning("Albumin levels are very high, are you sure they are in g/dL?", call. = F)
     }
     
     # if SI, convert to US (shameful, but most formulas are simpler in US units)
