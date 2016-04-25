@@ -17,11 +17,11 @@
 #' @param SI A logical operator. If \code{FALSE}, creatinine and BUN is in mg/dL, albumin in g/dL. Default is \code{TRUE}, i.e. umol/l, mmol/l, and g/l, respectively.
 #' @return The output is a vector of creatinine clearance values. Please be aware that unlike other formulas, Cockroft-Gault returns ml/min!
 #' @examples 
-#' # this will return a vector of creatinine clearance values
+#' # this will return a vector of estimated creatinine clearance values:
 #' eGFR <- CrCl(formula="Cockroft-Gault", creat=c(78,40,50), BW=c(70,50,30), age=c(50,78,30), male=c(1,0,0))
 #' 
-#' #this will print the Fortran code to be used in a model file
-#' CrCl("Cockroft-Gault")
+#' #this will print the Fortran code to be used in a model file, using US units:
+#' CrCl("Cockroft-Gault", SI=F)
 #' 
 #' @author Jan Strojil
 #' 
@@ -90,7 +90,6 @@ CrCl <- function(formula, creat, BW, age, male, black, BUN, albumin, preterm, he
     if (min(length(creat),length(age), length(height), length(preterm))!=max(length(creat),length(age), length(height), length(preterm))){
       stop("Vectors are not of equal length.", call. = F)
     }
-    if (max(age)>12)
     k <- rep(0.55, length(creat))
     k[age < 1 & preterm==1] <- 0.33
     k[age < 1 & preterm==0] <- 0.45
@@ -207,10 +206,10 @@ CrCl <- function(formula, creat, BW, age, male, black, BUN, albumin, preterm, he
     }
     if (SI){
       if (mean(creat)<10) warning("Creatinine levels are very low, are you sure they are in umol/l?", call. = F)
-      if (!missing(albumin) & mean(albumin)<10) warning("Albumin levels are very low, are you sure they are in g/l?", call. = F)
+      if (!missing(albumin)) if (mean(albumin)<10) warning("Albumin levels are very low, are you sure they are in g/l?", call. = F)
     } else {
       if (mean(creat)>10) warning("Creatinine levels are very high, are you sure they are in mg/dL?", call. = F)
-      if (!missing(albumin) & mean(albumin)>10) warning("Albumin levels are very high, are you sure they are in g/dL?", call. = F)
+      if (!missing(albumin)) if(mean(albumin)>10) warning("Albumin levels are very high, are you sure they are in g/dL?", call. = F)
     }
     
     # if SI, convert to US (shameful, but most formulas are simpler in US units)
