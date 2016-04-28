@@ -1,46 +1,67 @@
 #' Calculates creatinine clearance or outputs Fortran code for in-model calculations. Patient covariates are supplied as vectors of equal length. 
 #' If no patient values are supplied, the function outputs the Fortran code to be used in a \emp{Pmetrics} model file.
+#' Please note that to estimate GFR using the Jelliffe equation using two creatinine levels, a standalone function \code{\link{PMgetCRCL}} is available.
 #'
-#' \code{CrCl} takes vectors with patient parameters and calculates creatinine clearance using specified formula.
+#' \code{PMestGFR} takes vectors with patient parameters and calculates estimated creatinine clearance using specified formula.
 #'
 #' @title Calculate creatinine clearance
 #' @param formula Required. Identifies the formula to be used for calculation. Available options are \code{Cocroft-Gault}, \code{MDRD}, \code{MDRD-BUN}, \code{CKD-EPI}, \code{Schwartz}, \code{Mayo}, \code{Jelliffe73}.
-#' @param creat Required. A vector containing serum creatinine levels either in umol/l or mg/dL as specified by the \code{SI} parameter.
+#' @param scr Required. A vector containing serum creatinine levels either in \emph{μmol/l} or \emph{mg/dL} as specified by the \code{SI} parameter.
 #' @param age Required. A vector containing age values in years.
-#' @param male A vector specifying patients sex, 1 for male, 0 for female.
-#' @param BW A vector containing body weight values in kilograms.
+#' @param male A vector specifying patients' sex, 1 for male, 0 for female.
+#' @param wt A vector containing body weight values in \emph{kilograms} (note: regardless of the \code{SI} switch).
 #' @param black A vector of 1's and 0's specifying if patient is black, used for the MDRD and CKD-EPI formulas.
-#' @param BUN A vector of BUN values for the MDRD-BUN formula.
-#' @param albumin A vector of albumin levels for the MDRD-BUN formula.
+#' @param BUN A vector of BUN values for the MDRD-BUN formula. If \code{SI=T}, units are mmol/l, otherwise mg/dL.
+#' @param albumin A vector of albumin levels for the MDRD-BUN formula. If \code{SI=T}, units are g/l, otherwise g/dL.
 #' @param preterm A vector of 1's and 0's specifying if a child was born preterm. Used for the Schwartz formula.
 #' @param height A vector of heights in \emph{cm}. Used for the Schwartz formula.
-#' @param SI A logical operator. If \code{FALSE}, creatinine and BUN is in mg/dL, albumin in g/dL. Default is \code{TRUE}, i.e. umol/l, mmol/l, and g/l, respectively.
-#' @return The output is a vector of creatinine clearance values. Please be aware that unlike other formulas, Cockroft-Gault returns ml/min!
+#' @param SI A logical operator. If \code{FALSE}, creatinine and BUN is in mg/dL, albumin in g/dL. Default is \code{TRUE}, i.e. μmol/l, mmol/l, and g/l, respectively.
+#' @return The output is a vector of creatinine clearance values of equal lentgh to input vectors. Please be aware that unlike other formulas, Cockroft-Gault returns mL/min!
 #' @examples 
 #' # this will return a vector of estimated creatinine clearance values:
-#' eGFR <- CrCl(formula="Cockroft-Gault", creat=c(78,40,50), BW=c(70,50,30), age=c(50,78,30), male=c(1,0,0))
+#' eGFR <- PMestGFR(formula="Cockroft-Gault", scr=c(78,40,150), wt=c(70,50,30), age=c(50,78,30), male=c(1,0,0))
 #' 
-#' #this will print the Fortran code to be used in a model file, using US units:
-#' CrCl("Cockroft-Gault", SI=F)
+#' # this will add a new column with estimated GFR to an object called mdata.1:
+#' mdata.1 <- cbind(mdata.1, eGFR=PMestGFR(formula="Cockroft-Gault", scr=mdata.1$scr, wt=mdata.1$wt, age=mdata.1$age, male=mdata.1$male))
 #' 
-#' @author Jan Strojil
+#' # this will print the Fortran code to be used in a model file, using US units:
+#' PMestGFR("Cockroft-Gault", SI=F)
 #' 
-CrCl <- function(formula, creat, BW, age, male, black, BUN, albumin, preterm, height, SI=T){
-  # define subfunctions for individual calculations, all in US units
-  CG <- function(creat, age, BW, male){
-    if (min(length(creat),length(age), length(male),length(BW))!=max(length(creat),length(age), length(male),length(BW))){
+#' @author Jan Strojil & Michael Neely
+#' @seealso \code{\link{PMgetCRCL}}
+#' @export
+PMestGFR <- function(formula, scr, wt, age, male, black, BUN, albumin, preterm, height, SI=T){
+  
+  samelength <- function(...){
+
+    # stops if length of parameters is not the same
+    if (length(unique(lengths(list(...))))!=1)
       stop("Vectors are not of equal length.", call. = F)
-    }
-    coef <- rep(1, length(creat))
-    coef[male == 0] <- 0.85
-    CrCl_CG <-  ((140-age)*BW*coef)/(72*creat)
+
+    # checks if all values are numeric
+    if (!is.numeric(c(...)))
+      stop("Vectors contain non-numeric values.", call. = F)
+    
+    #spits out a warning if any values are NAs
+    if (anyNA(c(...)))
+      warning("Vectors contain missing values.", call. = F)
   }
-  CDK_EPI <- function(creat,age,male,black){
-    if (min(length(creat),length(age), length(male),length(black))!=max(length(creat),length(age), length(male),length(black))){
-      stop("Vectors are not of equal length.", call. = F)
-    }
-    if (SI) creat <- creat/88.4
-    nsub <- length(creat)
+  
+  # define subfunctions for individual calculations, all in US units
+  CG <- function(scr, age, wt, male){
+    samelength(scr, age, wt, male)
+
+    scr[is.na(male)] <- NA
+    coef <- rep(1, length(scr))
+    coef[male == 0] <- 0.85
+    CrCl_CG <-  ((140-age)*wt*coef)/(72*scr)
+  }
+  
+  CKD_EPI <- function(scr,age,male,black){
+    samelength(scr,age,male,black)
+
+    scr[is.na(male)|is.na(black)] <- NA
+    nsub <- length(scr)
     alpha <- rep(-0.329, nsub)
     kappa <- rep(0.7, nsub)
     coefF <- rep(1.018, nsub)
@@ -49,64 +70,83 @@ CrCl <- function(formula, creat, BW, age, male, black, BUN, albumin, preterm, he
     kappa[male == 1]  <-  0.9
     coefF[male == 1]  <-  1
     coefB[black == 0]  <-  1
-    maxi <-  creat/kappa
-    mini <-  creat/kappa
+    maxi <-  scr/kappa
+    mini <-  scr/kappa
     maxi[maxi < 1] <- 1
     mini[mini > 1] <- 1
     CrCl_CKD <-  141 * mini**alpha * maxi**(-1.209) * 0.993**age * coefF * coefB
   }
-  MDRD <- function(creat, age, male, black){
-    if (min(length(creat),length(age), length(male),length(black))!=max(length(creat),length(age), length(male),length(black))){
-      stop("Vectors are not of equal length.", call. = F)
-    }
-    nsub <- length(creat)
+  MDRD <- function(scr, age, male, black){
+    samelength(scr, age, male, black)    
+    scr[is.na(male)|is.na(black)] <- NA
+    nsub <- length(scr)
     coefF <- rep(1, nsub)
     coefB <- rep(1, nsub)
     coefF[male == 0] <- 0.742
     coefB[black == 1] <- 1.210
-    CrCl_MDRD <- 186 * creat**(-1.154) * age**(-0.203) * coefF * coefB
+    CrCl_MDRD <- 186 * scr**(-1.154) * age**(-0.203) * coefF * coefB
   }
-  MDRD_BUN <- function(creat, age, male, black, BUN, albumin){
-    if (min(length(creat),length(age), length(male),length(black),length(BUN),length(albumin))!=max(length(creat),length(age), length(male),length(black),length(BUN),length(albumin))){
-      stop("Vectors are not of equal length.", call. = F)
-    }
-    nsub <- length(creat)
+  MDRD_BUN <- function(scr, age, male, black, BUN, albumin){
+    samelength(scr, age, male, black, BUN, albumin)
+    scr[is.na(male)|is.na(black)] <- NA
+    nsub <- length(scr)
     coefF <- rep(1, nsub)
     coefB <- rep(1, nsub)
     coefF[male == 0] <-  0.742
     coefB[black == 1] <-  1.210
-    CrCl_MDRD_BUN <-  170 * creat**(-1.154) * age**(-0.203) * coefF * coefB * BUN**(-0.17) * albumin**(0.318)
+    CrCl_MDRD_BUN <-  170 * scr**(-1.154) * age**(-0.203) * coefF * coefB * BUN**(-0.17) * albumin**(0.318)
   }
-  Mayo <- function(creat, age, male){
-    if (min(length(creat),length(age), length(male))!=max(length(creat),length(age), length(male))){
-      stop("Vectors are not of equal length.", call. = F)
-    }
-    coefF <- rep(1, length(creat))
-    creat[creat < 0.8]  <- 0.8
+  Mayo <- function(scr, age, male){
+    samelength(scr, age, male)    
+    scr[is.na(male)] <- NA
+    coefF <- rep(1, length(scr))
+    scr[scr < 0.8]  <- 0.8
     coefF[male == 0]  <-  0.205
-    CrCl_MCQE <- 2.718**(1.911 + 5.249/creat - 2.114/creat**2 - 0.00686 * age - coefF)
+    CrCl_MCQE <- 2.718**(1.911 + 5.249/scr - 2.114/scr**2 - 0.00686 * age - coefF)
   }
-  Schwartz <- function(creat, age, height, preterm){
-    if (min(length(creat),length(age), length(height), length(preterm))!=max(length(creat),length(age), length(height), length(preterm))){
-      stop("Vectors are not of equal length.", call. = F)
-    }
-    k <- rep(0.55, length(creat))
+  Schwartz <- function(scr, age, height, preterm){
+    samelength(scr, age, height, preterm)
+    scr[is.na(preterm)] <- NA
+    k <- rep(0.55, length(scr))
     k[age < 1 & preterm==1] <- 0.33
     k[age < 1 & preterm==0] <- 0.45
-    CrCl_Schwartz = k * height / creat
+    CrCl_Schwartz = k * height / scr
   }
-  Jelliffe <- function(age, creat, male){
-    if (min(length(creat),length(age), length(male))!=max(length(creat),length(age), length(male))){
-      stop("Vectors are not of equal length.", call. = F)
-    }
-    CrCl_Jelliffe = (98-16*((age-20)/20))/creat
-    CrCl_Jelliffe[male == 0] <- 0.9 * CrCl_Jelliffe
+  Jelliffe73 <- function(scr, age, male){
+    samelength(scr, age, male)
+    scr[is.na(male)] <- NA
+    coefF <- rep(1, length(scr))
+    coefF[male==0] <- 0.9
+    CrCl_Jelliffe = coefF * (98-16*((age-20)/20))/scr
   }
+
+  # Jelliffe72 <- function(creat1, creat2, time1, time2, wt, age, male){
+  #   samelength(creat1, creat2, age, male)
+  #   creat1[is.na(male)] <- NA
+  #   coef1 <- rep(29.3, length(creat1))
+  #   coef2 <- rep(0.203, length(creat1))
+  #   coef1[male==0] <- 25.1
+  #   coef2[male==0] <- 0.175
+  #   ESS <- wt * (coef1 - (coef2 * age))
+  #   avg_creat <- (creat1 + creat2)/2
+  #   ESS_cor <- ESS * (1.035 - (0.0337 * avg_creat))
+  #   E <- ESS_cor - 4 * wt * (creat2-creat1)/(time2-time1)
+  #   CrCl_Jelliffe72 <- E / (14.4 * avg_creat)
+  # }
+  # 
+  
   if (missing(formula)){
     cat("No formula specified. Available options are:\n1) Cockroft-Gault\n2) MDRD\n3) MDRD-BUN\n4) CKD-EPI\n5) Schwartz\n6) Mayo\n7) Jelliffe73")
     stop("No formula specified, don't know what to do.", call. = F)
   }
-  if (missing(creat) & !missing(formula)){ # print out Fortran code
+  
+  if (formula %in% c("CG", "C-G")) formula <- "Cockroft-Gault"
+  if (!formula %in% c("Cockroft-Gault", "MDRD","MDRD-BUN","CKD-EPI","Schwartz","Mayo", "Jelliffe73")){
+    cat("Unknown formula name. Available options are:\n1) Cockroft-Gault\n2) MDRD\n3) MDRD-BUN\n4) CKD-EPI\n5) Schwartz\n6) Mayo\n7) Jelliffe73")
+    stop("Unknown formula.", call. = F)
+  }
+  
+  if (missing(scr) & !missing(formula)){ # print out Fortran code
     tCKD <- paste(
       "\nalpha=-0.329",
       "\nkappa=0.7",
@@ -116,76 +156,108 @@ CrCl <- function(formula, creat, BW, age, male, black, BUN, albumin, preterm, he
       "\n&IF(MALE == 1) kappa = 0.9", 
       "\n&IF(MALE == 1) coefF = 1",
       "\n&IF(BLACK == 0) coefB = 1",
-      "\nmaxi = CREAT/kappa",
-      "\nmini = CREAT/kappa",
+      "\nmaxi = SCR/kappa",
+      "\nmini = SCR/kappa",
       "\n&IF(maxi .LT. 1) maxi=1",
       "\n&IF(mini .GT. 1) mini=1",
       "\nCrCl_CKD =141 * mini**alpha * maxi**(-1.209) * 0.993**AGE * coefF * coefB", sep = "")
     
-    formulas <- list("Cockroft-Gault"=c(paste("\nc ### Cocroft-Gault - US units (mg/dL, kg) ### returns: ml/min",
+    formulas <- list("Cockroft-Gault"=c(paste("\nC ### Cocroft-Gault - US units (mg/dL, kg) ### returns: ml/min",
+                                              "\nC requires: SCR, AGE, WT, MALE",
                                               "\ncoef = 1",
                                               "\n&IF(MALE == 0) coef = 0.85",
-                                              "\nCrCl_CG = ((140-AGE) * BW * coef)/(72*CREAT)", sep = ""),
-                                        paste("\nc ### Cocroft-Gault - SI units (umol/l, kg) ### returns: ml/min",
+                                              "\nCrCl_CG = ((140-AGE) * WT * coef)/(72*SCR)", sep = ""),
+                                        paste("\nC ### Cocroft-Gault - SI units (μmol/l, kg) ### returns: ml/min",
+                                              "\nC requires: SCR, AGE, WT, MALE",
                                               "\ncoef = 1.23",
                                               "\n&IF(MALE == 0) coef = 1.04",
-                                              "\nCrCl_CG = ((140-AGE) * BW * coef)/CREAT", sep = "")),
-                     "CKD-EPI"=c(paste("\nc ### CKD-EPI - US units (mg/dL) ### returns: mL/min/1.73 m²",
+                                              "\nCrCl_CG = ((140-AGE) * WT * coef)/SCR", sep = "")),
+                     "CKD-EPI"=c(paste("\nC ### CKD-EPI - US units (mg/dL) ### returns: mL/min/1.73 m²",
+                                       "\nC requires: SCR, AGE, MALE, BLACK",
                                        tCKD, sep = ""),
-                                 paste("\nc ### CKD-EPI - SI units (umol/l) ### returns: mL/min/1.73 m²",
-                                       "\nCREAT = CREAT / 88.4", tCKD, sep = "")),
-                     "MDRD"=c(paste("\nc ### MDRD - US units (mg/dL) ### returns: mL/min/1.73 m²",
+                                 paste("\nC ### CKD-EPI - SI units (μmol/l) ### returns: mL/min/1.73 m²",
+                                       "\nC requires: SCR, AGE, MALE, BLACK",
+                                       "\nCREAT = SCR / 88.4", tCKD, sep = "")),
+                     "MDRD"=c(paste("\nC ### MDRD - US units (mg/dL) ### returns: mL/min/1.73 m²",
+                                    "\nC requires: SCR, AGE, MALE, BLACK",
                                     "\ncoefF=1",
                                     "\ncoefB=1",
                                     "\n&IF(MALE == 0) coefF = 0.742",
                                     "\n&IF(BLACK == 1) coefB = 1.210",
-                                    "\nCrCl_MDRD = 186 * CREAT**(-1.154) * AGE**(-0.203) * coefF * coefB", sep = ""),
-                              paste("\nc ### MDRD - SI units (umol/L) ### returns: mL/min/1.73 m²",
+                                    "\nCrCl_MDRD = 186 * SCR**(-1.154) * AGE**(-0.203) * coefF * coefB", sep = ""),
+                              paste("\nC ### MDRD - SI units (μmol/L) ### returns: mL/min/1.73 m²",
+                                    "\nC requires: SCR, AGE, MALE, BLACK",
                                     "\ncoefF=1",
                                     "\ncoefB=1",
                                     "\n&IF(MALE == 0) coefF = 0.742",
                                     "\n&IF(BLACK == 1) coefB = 1.210",
-                                    "\nCrCl_MDRD = 32788 * CREAT**(-1.154) * AGE**(-0.203) * coefF * coefB", sep = "")),
-                     "MDRD-BUN"=c(paste("\nc ### MDRD-BUN - US units (CREAT and BUN in mg/dL, ALB in g/dL) ### returns: mL/min/1.73 m²",
+                                    "\nCrCl_MDRD = 32788 * SCR**(-1.154) * AGE**(-0.203) * coefF * coefB", sep = "")),
+                     "MDRD-BUN"=c(paste("\nC ### MDRD-BUN - US units (SCR and BUN in mg/dL, ALB in g/dL) ### returns: mL/min/1.73 m²",
+                                        "\nC requires: SCR, AGE, MALE, BLACK, BUN, ALBUMIN",
                                         "\ncoefF=1",
                                         "\ncoefB=1",
                                         "\n&IF(MALE == 0) coefF = 0.762",
                                         "\n&IF(BLACK == 1) coefB = 1.180", 
-                                        "\nCrCl_MDRD-BUN = 170 * CREAT**(-1.154) * AGE**(-0.203) * coefF * coefB * BUN**(-0.17) * ALB**(0.318)", sep = ""),
-                                  paste("\nc ### MDRD-BUN - SI units (CREAT in umol/L, BUN in mmol/L, ALB in g/L) ### returns: mL/min/1.73 m²",
+                                        "\nCrCl_MDRD-BUN = 170 * SCR**(-1.154) * AGE**(-0.203) * coefF * coefB * BUN**(-0.17) * ALB**(0.318)", sep = ""),
+                                  paste("\nC ### MDRD-BUN - SI units (SCR in μmol/L, BUN in mmol/L, ALB in g/L) ### returns: mL/min/1.73 m²",
+                                        "\nC requires: SCR, AGE, MALE, BLACK, BUN, ALBUMIN",
                                         "\ncoefF=1",
                                         "\ncoefB=1",
                                         "\n&IF(MALE == 0) coefF = 0.742",
                                         "\n&IF(BLACK == 1) coefB = 1.210",
-                                        "\nCrCl_MDRD-BUN = 170 * CREAT**(-1.154) * AGE**(-0.203) * coefF * coefB * (BUN/0.3571)**(-0.17) * (ALB/10)**(0.318)", sep = "")),
-                     "Mayo"=c(paste("\nc ### Mayo Quadratic - US units (CREAT in mg/dL) ### returns: mL/min/1.73 m²",
+                                        "\nCrCl_MDRD-BUN = 170 * SCR**(-1.154) * AGE**(-0.203) * coefF * coefB * (BUN/0.3571)**(-0.17) * (ALB/10)**(0.318)", sep = "")),
+                     "Mayo"=c(paste("\nC ### Mayo Quadratic - US units (SCR in mg/dL) ### returns: mL/min/1.73 m²",
+                                    "\nC requires: SCR, AGE, MALE",
                                     "\ncoefF=1",
-                                    "\n&IF(CREAT < 0.8) CREAT=0.8",
+                                    "\n&IF(SCR < 0.8) SCR=0.8",
                                     "\n&IF(MALE == 0) coefF = 0.205",
-                                    "\nCrCl_MCQ = 2.718**(1.911 + 5.249/CREAT - 2.114/CREAT**2 - 0.00686 * AGE - coefF)", sep = ""),
-                              paste("\nc ### Mayo Quadratic - SI units (CREAT in umol/L) ### returns: mL/min/1.73 m²",
+                                    "\nCrCl_MCQ = 2.718**(1.911 + 5.249/SCR - 2.114/SCR**2 - 0.00686 * AGE - coefF)", sep = ""),
+                              paste("\nC ### Mayo Quadratic - SI units (SCR in μmol/L) ### returns: mL/min/1.73 m²",
+                                    "\nC requires: SCR, AGE, MALE",
                                     "\ncoefF=1",
-                                    "\nCREAT = CREAT / 88.4",
-                                    "\n&IF(CREAT < 0.8) CREAT=0.8",
+                                    "\nSCR = SCR / 88.4",
+                                    "\n&IF(SCR < 0.8) SCR=0.8",
                                     "\n&IF(MALE == 0) coefF = 0.205",
-                                    "\nCrCl_MCQ = 2.718**(1.911 + 5.249/CREAT - 2.114/CREAT**2 - 0.00686 * AGE - coefF)", sep = "")),
-                     "Schwartz"=c(paste("\nc ### Schwartz - US units (CREAT in mg/dL, height in cm) ### returns: mL/min/1.73 m²",
+                                    "\nCrCl_MCQ = 2.718**(1.911 + 5.249/SCR - 2.114/SCR**2 - 0.00686 * AGE - coefF)", sep = "")),
+                     "Schwartz"=c(paste("\nC ### Schwartz - US units (SCR in mg/dL, height in cm) ### returns: mL/min/1.73 m²",
+                                        "\nC requires: SCR, AGE, HEIGHT, PRETERM",
                                         "\nk=0.55",
                                         "\n&IF(AGE.LT.1 .AND. PRETERM==1) k=0.33",
                                         "\n&IF(AGE.LT.1 .AND. PRETERM==0) k=0.45",
-                                        "\nCrCl_Schwartz = k * HEIGHT / CREAT", sep = ""),
-                                  paste("\nc ### Schwartz - SI units (CREAT in umol/L, height in cm) ### returns: mL/min/1.73 m²",
-                                        "\nCREAT = CREAT/88.4",
+                                        "\nCrCl_Schwartz = k * HEIGHT / SCR", sep = ""),
+                                  paste("\nC ### Schwartz - SI units (SCR in μmol/L, height in cm) ### returns: mL/min/1.73 m²",
+                                        "\nC requires: SCR, AGE, HEIGHT, PRETERM",
+                                        "\nSCR = SCR/88.4",
                                         "\nk=0.55",
                                         "\n&IF(AGE.LT.1 .AND. PRETERM==1) k=0.33",
                                         "\n&IF(AGE.LT.1 .AND. PRETERM==0) k=0.45",
-                                        "\nCrCl_Schwartz = k * HEIGHT / CREAT", sep = "")),
-                     "Jelliffe"=c(paste("\nc #### Jellife - US units (creat in mg/dL) ### returns: mL/min/1.73 m²",
-                                        "\nCrCl_Jelliffe = (98-16*((AGE-20)/20))/CREAT",
+                                        "\nCrCl_Schwartz = k * HEIGHT / SCR", sep = "")),
+                     "Jelliffe73"=c(paste("\nC #### Jellife 1973 - US units (scr in mg/dL) ### returns: mL/min/1.73 m²",
+                                        "\nC requires: SCR, AGE, MALE",
+                                        "\nCrCl_Jelliffe = (98-16*((AGE-20)/20))/SCR",
                                         "\n&IF(MALE == 0) CrCl_Jelliffe = 0.9 * CrCl_Jelliffe", sep = ""),
-                                  paste("\nc #### Jellife - SI units (creat in umol/l) ### returns: mL/min/1.73 m²",
-                                        "\nCrCl_Jelliffe = (98-16*((AGE-20)/20))/(CREAT/88.4)",
+                                  paste("\nC #### Jellife 1973 - SI units (scr in μmol/l) ### returns: mL/min/1.73 m²",
+                                        "\nC requires: SCR, AGE, MALE",
+                                        "\nCrCl_Jelliffe = (98-16*((AGE-20)/20))/(SCR/88.4)",
                                         "\n&IF(MALE == 0) CrCl_Jelliffe = 0.9 * CrCl_Jelliffe", sep = ""))
+                     # "Jelliffe73"=c(paste("\nC #### Jellife 1972 - US units (scr in mg/dL) ### returns: mL/min/1.73 m²",
+                     #                      "\nC requires: SCR1, SCR2, TIME1, TIME2, WT, AGE, MALE",
+                     #                      "\n&IF(MALE==1) ESS = WT * (29.3 - (0.203 * AGE))",
+                     #                      "\n&IF(MALE==0) ESS = WT * (25.1 - (0.175 * AGE))",
+                     #                      "\navg_creat = (CREAT1 + CREAT2) / 2",
+                     #                      "\nESS_cor = ESS * (1.035 - (0.0337 * avg_creat))",
+                     #                      "\nE = ESS_cor - 4 * WT * (CREAT2 - CREAT1) / (TIME2 - TIME1)",
+                     #                      "\nCRCL = E / (14.4 * avg_creat)"),
+                     #                paste("\nC #### Jellife 1972 - SI units (scr in μmol/l) ### returns: mL/min/1.73 m²",
+                     #                      "\nC requires: SCR1, SCR2, TIME1, TIME2, WT, AGE, MALE",
+                     #                      "\nSCR1 = SCR1/88.4
+                     #                      "\nSCR2 = SCR2/88.4
+                     #                      "\n&IF(MALE==1) ESS = WT * (29.3 - (0.203 * AGE))",
+                     #                      "\n&IF(MALE==0) ESS = WT * (25.1 - (0.175 * AGE))",
+                     #                      "\navg_creat = (CREAT1 + CREAT2) / 2",
+                     #                      "\nESS_cor = ESS * (1.035 - (0.0337 * avg_creat))",
+                     #                      "\nE = ESS_cor - 4 * WT * (CREAT2 - CREAT1) / (TIME2 - TIME1)",
+                     #                      "\nCRCL = E / (14.4 * avg_creat)"),
     )
     
     cat("\nCopy the code below into the #sec block of your model file, renaming the covariates as needed:\n")
@@ -195,39 +267,43 @@ CrCl <- function(formula, creat, BW, age, male, black, BUN, albumin, preterm, he
   else {
     
     # checks
-    if (missing(creat)){
+    if (missing(scr)){
       stop("Missing serum creatinine values.", call. = F)
     }
     if (missing(age)){
       stop("Missing age values.", call. = F)
     }
     if (missing(male) & formula!="Schwartz"){
-      stop("Missing sex.", call. = F)
+      stop("Missing vector with gender information.", call. = F)
     }
+    
+    # rudimentary unit check - in SI units, scr < 10 is very unlikely, so is albumin < 10
     if (SI){
-      if (mean(creat)<10) warning("Creatinine levels are very low, are you sure they are in umol/l?", call. = F)
+      if (mean(scr)<10) warning("Creatinine levels are very low, are you sure they are in μmol/l?", call. = F)
       if (!missing(albumin)) if (mean(albumin)<10) warning("Albumin levels are very low, are you sure they are in g/l?", call. = F)
     } else {
-      if (mean(creat)>10) warning("Creatinine levels are very high, are you sure they are in mg/dL?", call. = F)
+      if (mean(scr)>10) warning("Creatinine levels are very high, are you sure they are in mg/dL?", call. = F)
       if (!missing(albumin)) if(mean(albumin)>10) warning("Albumin levels are very high, are you sure they are in g/dL?", call. = F)
     }
     
-    # if SI, convert to US (shameful, but most formulas are simpler in US units)
+    # if SI, convert to US (it's shameful)
     if (SI){
-      creat <- creat / 88.4
-      if (!missing(albumin)) albumin <- albumin*10
-      if (!missing(BUN)) BUN <- BUN*0.3571
+      scr <- scr / 88.4
+      if (!missing(albumin)) albumin <- albumin/10
+      if (!missing(BUN)) BUN <- BUN/0.3571
     }
+    
     
     # call function with corresponding formula
     switch(formula,
-           "Cockroft-Gault"={rval <- CG(creat, age, BW, male)},
-           "CKD-EPI"= {rval <- CDK_EPI(creat,age,male,black)},
-           "MDRD"={rval <- MDRD(creat, age, male, black)},
-           "MDRD-BUN"={rval <- MDRD_BUN(creat, age, male, black, BUN, albumin)},
-           "Mayo"={rval <- Mayo(creat, age, male)},
-           "Schwartz"={rval <- Schwartz(creat, age, height, preterm)},
-           "Jelliffe73"={rval <- Jelliffe(age, creat, male)}
+           "Cockroft-Gault"={rval <- CG(scr, age, wt, male)},
+           "CKD-EPI"= {rval <- CKD_EPI(scr,age,male,black)},
+           "MDRD"={rval <- MDRD(scr, age, male, black)},
+           "MDRD-BUN"={rval <- MDRD_BUN(scr, age, male, black, BUN, albumin)},
+           "Mayo"={rval <- Mayo(scr, age, male)},
+           "Schwartz"={rval <- Schwartz(scr, age, height, preterm)},
+#           "Jelliffe72"={rval <- Jelliffe72(scr, scr2, time1, time2, wt, age, male)},
+           "Jelliffe73"={rval <- Jelliffe73(scr, age, male)}
     )
     return(rval)
   }
