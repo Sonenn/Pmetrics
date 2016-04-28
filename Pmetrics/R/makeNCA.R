@@ -220,6 +220,11 @@ makeNCA <- function(x,postPred=F,include,exclude,input=1,icen="median",outeq=1,b
     mdata2 <- filterResults[[1]]
     startTimes <- filterResults[[2]]
     endTimes <- filterResults[[3]]
+   
+    # delete start and end times of subjects excluded from the run and missing from post object
+    startTimes <- startTimes[unique(post$id)]
+    endTimes <- endTimes[unique(post$id)]
+    
     #now filter post by time
     whichtime <<- 0
     post2 <- ddply(post,.(id),timeFilter,startTimes,endTimes)
