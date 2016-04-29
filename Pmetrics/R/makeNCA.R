@@ -30,9 +30,9 @@
 #' concentrations.  Default is \code{FALSE}. Ignored if an IT2B run is
 #' used to supply the raw data file.
 #' @param include A vector of subject IDs to include in the NCA, e.g. c(1:3,5,15)
-#' @param exclude A vector of subject IDs to exclude in the NCA, e.g. c(4,6:14,16:20)
+#' @param exclude A vector of subject IDs to exclude in the NCA, e.g. c(4,6:14,16:20). When \code{postPred} is \code{TRUE}, any subject(s) excluded from the IT2B/NPAG run will be excluded as well.
 #' @param input The number of the input (e.g. drug) to analyze; default 1.
-#' @param icen If \code{post} is \code{TRUE}, use predictions based on median or mean of each
+#' @param icen If \code{postPred} is \code{TRUE}, use predictions based on median or mean of each
 #' subject's Bayesian posterior parameter distribution.  Default is "median", but could be "mean".
 #' @param outeq The number of the output equation to analyze; default 1
 #' @param block The number of the observation block within subjects, with each block delimited by EVID=4 in the data file; default 1
@@ -75,6 +75,7 @@
 
 makeNCA <- function(x,postPred=F,include,exclude,input=1,icen="median",outeq=1,block=1,
                     start=0,end=Inf,first=NA,last=NA,terminal=3){
+  
   
   if(length(grep("plyr",installed.packages()[,1]))==0){
     install.packages("plyr",repos="http://cran.cnr.Berkeley.edu",dependencies=T)
@@ -129,6 +130,7 @@ makeNCA <- function(x,postPred=F,include,exclude,input=1,icen="median",outeq=1,b
   
   #function to filter mdata by time interval
   mdataFilter <- function(mdata,start,end,first,last){
+    
     nsub <- length(unique(mdata$id))
     doseTimes <- by(mdata$time[mdata$evid!=0],mdata$id[mdata$evid!=0],function(x) x)
     
@@ -216,14 +218,11 @@ makeNCA <- function(x,postPred=F,include,exclude,input=1,icen="median",outeq=1,b
   #function to convert post into data frame of of ID, time, conc, prev dose
   conv_post <- function(post,mdata,include,exclude,input,outeq,block,icen,start,end,first,last){
     #first, figure out time interval
+    
     filterResults <- mdataFilter(mdata,start,end,first,last)
     mdata2 <- filterResults[[1]]
     startTimes <- filterResults[[2]]
     endTimes <- filterResults[[3]]
-   
-    # delete start and end times of subjects excluded from the run and missing from post object
-    startTimes <- startTimes[unique(post$id)]
-    endTimes <- endTimes[unique(post$id)]
     
     #now filter post by time
     whichtime <<- 0
@@ -285,17 +284,26 @@ makeNCA <- function(x,postPred=F,include,exclude,input=1,icen="median",outeq=1,b
     dataList <- conv_mdata(mdata,input=input,outeq=outeq,block=block,start=start,end=end,first=first,last=last)
   }
   if(inherits(data,"NPAG")){ #using NPAG
+    
     if(!missing(include)){
       mdata <- subset(mdata,sub("[[:space:]]+","",as.character(mdata$id)) %in% as.character(include))
       post <- subset(post,sub("[[:space:]]+","",as.character(post$id)) %in% as.character(include))
-      
     } 
+
     if(!missing(exclude)){
       mdata <- subset(mdata,!sub("[[:space:]]+","",as.character(mdata$id)) %in% as.character(exclude))
       post <- subset(post,!sub("[[:space:]]+","",as.character(post$id)) %in% as.character(exclude))
-    }  
-    
+      if (length(unique(mdata$id))==0) stop("No subjects left to analyze.", call. = F)
+    }
+
     if(postPred){
+      # check if any subjects are still missing from the post object after include/exclude are done, exclude them from the analysis and warn user
+      missing_from_post <- setdiff(unique(mdata$id), unique(post$id)) #there should never be more in post than in mdata
+      if (length(missing_from_post)!=0){
+        warning("Subjects No. ", paste(missing_from_post, collapse = ", "),  " are missing from the post object and were excluded.", call. = F)
+        mdata <- subset(mdata,!sub("[[:space:]]+","",as.character(mdata$id)) %in% as.character(missing_from_post))
+        post <- subset(post,!sub("[[:space:]]+","",as.character(post$id)) %in% as.character(missing_from_post))
+      }
       dataList <- conv_post(post=post,mdata=mdata,input=input,outeq=outeq,block=block,icen=icen,start=start,end=end,first=first,last=last)
     } else {      
       dataList <- conv_mdata(mdata,input=input,outeq=outeq,block=block,start=start,end=end,first=first,last=last)
