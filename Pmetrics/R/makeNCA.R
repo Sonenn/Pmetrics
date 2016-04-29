@@ -303,6 +303,7 @@ makeNCA <- function(x,postPred=F,include,exclude,input=1,icen="median",outeq=1,b
         warning("Subjects No. ", paste(missing_from_post, collapse = ", "),  " are missing from the post object and were excluded.", call. = F)
         mdata <- subset(mdata,!sub("[[:space:]]+","",as.character(mdata$id)) %in% as.character(missing_from_post))
         post <- subset(post,!sub("[[:space:]]+","",as.character(post$id)) %in% as.character(missing_from_post))
+        if (length(unique(mdata$id))==0) stop("No subjects left to analyze.", call. = F)
       }
       dataList <- conv_post(post=post,mdata=mdata,input=input,outeq=outeq,block=block,icen=icen,start=start,end=end,first=first,last=last)
     } else {      
