@@ -191,7 +191,7 @@ SIMparse <- function(file,include,exclude,combine=F,silent=F, parallel){
   } # end of filecheck cycle
 
   allfiles <- unique(Sys.glob(files)) # unique to exclude duplicates
-  simnum <- as.numeric(sapply(workfiles,function(x) strparse("([[:digit:]]+)(?!.*[[:digit:]])",x)))
+  simnum <- as.numeric(sapply(allfiles,function(x) strparse("([[:digit:]]+)(?!.*[[:digit:]])",x)))
   # new reg exp matches the last number in filename rather than the first; "run5out1.txt" will now return 1 rather than 5
   allfiles <- allfiles[order(simnum)]
   if(!missing(include)){
