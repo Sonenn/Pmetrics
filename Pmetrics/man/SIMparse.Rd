@@ -4,7 +4,7 @@
 \alias{SIMparse}
 \title{Parse Pmetrics Simulator Output}
 \usage{
-SIMparse(file, include, exclude, combine = F, silent = F)
+SIMparse(file, include, exclude, combine = F, silent = F, parallel)
 }
 \arguments{
 \item{file}{An output file or files of the simulator in the current working directory, or the full
@@ -25,6 +25,9 @@ will be a list of PMsim objects, which can be plotted or otherwise accessed usin
 referencing, e.g. simlist[[1]], simlist[[2]], etc.}
 
 \item{silent}{Suppress messages}
+
+\item{parallel}{Runs in parallel mode.  Defaults to true if multiple files are to be parsed, otherwise false.
+Can be overridden by specifying \code{TRUE} or \code{FALSE}.}
 }
 \value{
 If one file is parsed or multiple files are parsed and combined, the return will be a list with five items, of class \emph{PMsim}.
@@ -54,11 +57,13 @@ Parses the output of the Pmetrics simulator
 \details{
 For \code{file} specification \dQuote{?} will be matched by just a single numeral or character; \dQuote{*} will be
 matched by any number of consecutive alphanumeric characters.  Examples include \code{file='simout1.txt,simout2.txt,simout3.txt'},
-\code{file='simout?.txt'} and \code{file='sim*.txt'}.  All three will find the files simout1.txt,
-simout2.txt, and simout3.txt in the working directory.  The second example would also find simout4.txt, etc.  The third
-example would also find sim_1.txt if that existed.  Note that to combine simulator output files, the numbers of simulated profiles may differ.
+\code{file='simout?.txt'} and \code{file='sim*.txt'}.All three will find the files simout1.txt,
+simout2.txt, and simout3.txt in the working directory. The second example would also find simout4.txt, etc.  The third
+example would also find sim_1.txt if that existed.
+Note that to combine simulator output files, the numbers of simulated profiles may differ.
 The number of outputs and times of observations also may differ, although combining these may lead to
 strange plots since not all profiles have the same observations.
+For parallel execution, the function requires packages 'doParallel' and 'foreach'. If not installed, it will try to install, failing that it will run in serial mode.
 }
 \author{
 Michael Neely

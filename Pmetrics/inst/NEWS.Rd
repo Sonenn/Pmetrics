@@ -16,10 +16,13 @@
 \item makePTA with target.type = 'time' now MUCH faster thanks to improvements by Jan Strojil
 \item Added the ability to makePTA to recalculate success threshold and redefine labels using existing PMpta object
 }
+}
 \subsection{BUG FIXES}{
 \itemize{
 \item The mult argument works properly in plot.PMsim now.
 \item Fixed bug in makePTA and simulated targets that miscalculated success
+\item Fixed bug in makeNPDE that caused a crash when model and data files have same basename.
+\item Corrected makeFinal postPoints when nsub>100
 }
 }
 }
@@ -32,6 +35,7 @@
 \itemize{
 \item Added a check to PMcheck for subjects with no observations
 \item Added binSize argument to plot.PMsim to bin simulated concentrations, which is useful for VPCs.
+}
 }
 \subsection{BUG FIXES}{
 \itemize{

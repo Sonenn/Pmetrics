@@ -12,7 +12,7 @@ PMupdate <- function(force=F){
   currentVersion <- package_version(suppressWarnings(
     tryCatch(scan("http://www.lapk.org/software/Pmetrics/PmetricsVersion.txt",what="character",quiet=T), 
              error = function(e) e <-"0.1")))  
-  if(currentVersion=="0.1"){cat("LAPK server not available. Check your internet connection.\n");return(invisible(FALSE))}
+  if(currentVersion=="0.1"){cat("LAPKB server not available. Check your internet connection.\n");return(invisible(FALSE))}
   installedVersion <- packageVersion("Pmetrics")
   if(!force & installedVersion >= currentVersion){
     cat("You have the most current version of Pmetrics.\n")
