@@ -82,20 +82,22 @@ ITparse <- function(outfile="IT_RF0001.TXT"){
                    " VERSION 1.1 - JAN 2011 "=1,
                    " VERSION 1.2 - APR 2011 "=2,
                    " VERSION 1.3 - JUL 2011 "=3,
-                   " VERSION 1.4 - JUL 2012 "=3,3)
-  dimlines <- switch(vernum,6,6,9)
+                   " VERSION 1.4 - JUL 2012 "=3,
+                   " VERSION 1.5 - MAR 2016 "=4,4)
+  dimlines <- switch(vernum,6,6,9,10)
   ITdims <- scan(outfile,quiet=T,skip=3,nlines=dimlines,comment.char="#")
-  #number of subjects
-  nsub <- ITdims[1]
-  #number of random parameters
-  nvar <- ITdims[2]
-  #number of fixed parameters
-  nofix <- ITdims[3]
+  
   
   
   
   #if version 1.2 or less
   if(vernum<3){
+    #number of subjects
+    nsub <- ITdims[1]
+    #number of random parameters
+    nvar <- ITdims[2]
+    #number of fixed parameters
+    nofix <- ITdims[3]
     #final cycle number
     icyctot <- ITdims[4]
     #number of output equations
@@ -111,7 +113,177 @@ ITparse <- function(outfile="IT_RF0001.TXT"){
     nobsmax <- max(nobs)
     #get table of contents
     toc <- scan(outfile,quiet=T,skip=12+2*nsub,n=21,comment.char="#")
-  } else {
+    #get random parameter names
+    par <- scan(outfile,what="character",n=nvar,skip=toc[1],quiet=T)
+    #get fixed parameter names
+    parfix <- if(nofix>0) scan(outfile,what="character",skip=toc[2],n=nofix,quiet=T)
+    #get initial ranges for random parameters
+    ab <- matrix(scan(outfile,n=nvar*3,skip=toc[3],quiet=T,what="character"),nrow=nvar,ncol=3,byrow=T)
+    fixedpos <- which(ab[,3]=="NO")
+    if(length(fixedpos)==0) fixedpos <- NULL
+    ab <- matrix(as.numeric(ab[,1:2]),ncol=2)
+    #get values for fixed parameters
+    valfix <- if(nofix>0) scan(outfile,skip=toc[4],n=nofix,quiet=T)
+    #get the covariate names
+    covNameOffset <- switch(vernum,2,0,0)
+    if (ncov>0){
+      covnames <- scan(outfile,what="character",skip=toc[5],n=ncov+covNameOffset,quiet=T)
+    } else {covnames <- NA}
+    #get aic-bic
+    ic <- matrix(data=as.numeric(sub("D","E",scan(outfile,skip=toc[6],n=2,quiet=T,what=""))),nrow=1,ncol=2,byrow=T)
+    #get population predictions at observation times
+    temp1 <-as.numeric(sub("D","E",scan(outfile,skip=toc[7],n=numeqt*sum(nobs)*2,quiet=T,what="")))
+    
+    #get posterior predictions at observation times
+    temp2 <-as.numeric(sub("D","E",scan(outfile,skip=toc[8],n=numeqt*sum(nobs)*2,quiet=T,what="")))
+    
+    #flag negative pop or post preds
+    if (any(temp1<0,na.rm=T) | any(temp2<0,na.rm=T)){
+      #    temp1[temp1<0] <- 0
+      #    temp2[temp2<0] <- 0
+      negflag <- T
+    }
+    
+    ypredpop <- array(dim=c(nsub,numeqt,nobsmax,2))
+    ypredbay <- array(dim=c(nsub,numeqt,nobsmax,2))
+    count <- 1
+    cat("\nPopulation and posterior predictions at each subject's observation times.\n")
+    flush.console()
+    pb <- txtProgressBar(min = 1, max = nsub, style = 3)
+    for (jsub in 1:nsub){
+      setTxtProgressBar(pb,jsub)
+      for (ieq in 1:numeqt){
+        for (iobs in 1:nobs[jsub]){
+          for (icen in 1:2){
+            ypredpop[jsub,ieq,iobs,icen]<-temp1[count]
+            ypredbay[jsub,ieq,iobs,icen]<-temp2[count]
+            count <- count+1
+          }
+        }
+      }
+    }
+    count <- 1
+    #get MAP bayesian parameter estimate
+    temp <-as.numeric(sub("D","E",scan(outfile,skip=toc[9],n=nsub*2*nvar,quiet=T,what="")))
+    parbay <- array(dim=c(nsub,nvar,2))
+    count <- 1
+    cat("\nBayesian posterior parameters.\n")
+    flush.console()
+    pb <- txtProgressBar(min = 1, max = nsub, style = 3)
+    for (jsub in 1:nsub){
+      setTxtProgressBar(pb,jsub)
+      for (ivar in 1:nvar){
+        for (icen in 1:2){
+          parbay[jsub,ivar,icen]<-temp[count]
+          count <- count+1
+          
+        }
+      }
+    }
+    count <- 1
+    
+    #CYCLE INFORMATION
+    cat("\nCycle information.\n")
+    flush.console()
+    if (icyctot > 0){
+      #get log-likelihoods
+      ilog <- as.numeric(sub("D","E",scan(outfile,skip=toc[10],n=icyctot,quiet=T,what="")))
+      #get means
+      imean <- matrix(data=as.numeric(sub("D","E",scan(outfile,skip=toc[11],n=icyctot*nvar,quiet=T,what=""))),nrow=icyctot,ncol=nvar,byrow=T)
+      dimnames(imean) <- list(cycle=1:icyctot,par=par)
+      #get medians
+      imed <- matrix(data=as.numeric(sub("D","E",scan(outfile,skip=toc[12],n=icyctot*nvar,quiet=T,what=""))),nrow=icyctot,ncol=nvar,byrow=T)
+      dimnames(imed) <- list(cycle=1:icyctot,par=par)
+      #get SDs
+      if(nsub>1) {
+        isd <- matrix(data=as.numeric(sub("D","E",scan(outfile,skip=toc[13],n=icyctot*nvar,quiet=T,what=""))),nrow=icyctot,ncol=nvar,byrow=T)
+      } else { isd <- matrix(NA,nrow=icyctot,ncol=nvar)}
+      dimnames(isd) <- list(cycle=1:icyctot,par=par)
+      #get CVs
+      if(nsub>1) {
+        icv <- matrix(data=as.numeric(sub("D","E",scan(outfile,skip=toc[14],n=icyctot*nvar,quiet=T,what=""))),nrow=icyctot,ncol=nvar,byrow=T)
+      } else { icv <- matrix(NA,nrow=icyctot,ncol=nvar)}
+      dimnames(icv) <- list(cycle=1:icyctot,par=par)
+      
+      #get gamlam values
+      igamlam <- matrix(data=as.numeric(sub("D","E",scan(outfile,skip=toc[15],n=numeqt*icyctot,quiet=T,what=""))),ncol=numeqt,byrow=T)
+      
+      #calculate cycle aic and bic
+      if(all(diff(as.numeric(igamlam))==0)){q <- 0} else {q <- 1}
+      aic <- -2*ilog + (nvar^2 + 3*nvar)/2 + q
+      bic <- -2*ilog + 0.5*((nvar^2 + 3*nvar)/2 + q) * log(sum(nobs))
+      iic <- data.frame(cbind(aic,bic))
+      names(iic) <- c("AIC","BIC")
+      
+    } else {
+      ilog <- NA
+      iic <- NA
+      imean <- NA
+      isd <- NA
+      icv <- NA
+      igamlam <- NA
+    }
+    
+    #LAST CYCLE
+    #get par values
+    lpar <- matrix(data=as.numeric(sub("D","E",scan(outfile,skip=toc[16],n=nsub*nvar,quiet=T,what=""))),nrow=nsub,ncol=nvar,byrow=T)
+    dimnames(lpar) <- list(nsub=1:nsub,par=par)
+    #get par SDs
+    lsd <- matrix(data=as.numeric(sub("D","E",scan(outfile,skip=toc[17],n=nsub*nvar,quiet=T,what=""))),nrow=nsub,ncol=nvar,byrow=T)
+    dimnames(lsd) <- list(nsub=1:nsub,par=par)
+    #get par CVs
+    lcv <- matrix(data=as.numeric(sub("D","E",scan(outfile,skip=toc[18],n=nsub*nvar,quiet=T,what=""))),nrow=nsub,ncol=nvar,byrow=T)
+    dimnames(lcv) <- list(nsub=1:nsub,par=par)
+    
+    #SUBJECT DATA
+    cat("\nSubject and covariate data.\n")
+    flush.console()
+    sdata <- matrix(scan(outfile,skip=toc[19],n=nsub*5,quiet=T,what="character"),nrow=nsub,ncol=5,byrow=T)
+    sdata <- data.frame(id=checkID(sdata[,2]),nsub=1:nsub,age=as.numeric(sdata[,3]),
+                        sex=sdata[,4],ht=as.numeric(sdata[,5]))
+    #dose covariates
+    doseCovOffset <- switch(vernum,3,1,1)
+    dosecov <- cbind(rep(1:nsub,ndose),matrix(as.numeric(sub("D","E",scan(outfile,skip=toc[20],n=sum(ndose)*(2*ndrug+doseCovOffset+ncov),quiet=T,what=""))),nrow=sum(ndose),byrow=T))
+    
+    #outputs
+    outputs <- switch(vernum,
+                      cbind(rep(1:nsub,nobs),matrix(as.numeric(sub("D","E",scan(outfile,skip=toc[21],n=sum(nobs)*(numeqt+1),quiet=T,what=""))),nrow=sum(nobs),byrow=T)),
+                      matrix(as.numeric(sub("D","E",scan(outfile,skip=toc[21],n=sum(nobs)*(numeqt)*8,quiet=T,what=""))),ncol=8,byrow=T),
+                      matrix(as.numeric(sub("D","E",scan(outfile,skip=toc[21],n=sum(nobs)*(numeqt)*8,quiet=T,what=""))),ncol=8,byrow=T))
+    outputs <- data.frame(outputs)
+    names(outputs) <- c("id","time","outeq","out","c0","c1","c2","c3")
+    
+    #data filename
+    mdata <- scan(outfile,skip=toc[21]+sum(nobs)*numeqt,quiet=T,what="character",n=1)
+    if(length(mdata)==0) mdata <- "NA"
+    
+    #summary
+    cat("Output file:",outfile,"\n")
+    cat("Random parameters:",par,"\n")
+    if(nofix==0){cat("There were no fixed parameters.\n")
+    } else {cat("Fixed parameters:",parfix,"\n")}
+    cat("Number of analyzed subjects:",nsub,"\n")
+    cat("Number of output equations:",numeqt,"\n")
+    cat("Additional covariates:",covnames,"\n")
+    if (negflag){ cat("WARNING: There were negative or non-real pop/post predictions.\n")}
+    coninterp <- switch(1+converge,"The run did not converge before the last cycle.","The run converged.","","WARNING: The run ended with a Hessian Error.")
+    cat(coninterp,"\n")
+    
+    outlist <- list(nsub=nsub,nvar=nvar,nofix=nofix,par=par,parfix=parfix,covnames=covnames,ab=ab,valfix=valfix,
+                    icyctot=icyctot,numeqt=numeqt,ndrug=ndrug,ndose=ndose,ncov=ncov,
+                    nobs=nobs,nobsmax=nobsmax,ypredpop=ypredpop,
+                    ypredbay=ypredbay,parbay=parbay,ilog=ilog,iic=iic,
+                    imean=imean,imed=imed,isd=isd,icv=icv,igamlam=igamlam,lpar=lpar,lsd=lsd,lcv=lcv,
+                    sdata=sdata,dosecov=dosecov,outputs=outputs,negflag=negflag)
+  } 
+  
+  if(vernum==3) { #versions 1.3 and 1.4
+    #number of subjects
+    nsub <- ITdims[1]
+    #number of random parameters
+    nvar <- ITdims[2]
+    #number of fixed parameters
+    nofix <- ITdims[3]
     #maximum cycles
     icycmax <- as.numeric(ITdims[4])
     #final cycle number
@@ -139,172 +311,164 @@ ITparse <- function(outfile="IT_RF0001.TXT"){
     nobsmax <- max(nobs)
     
     #get table of contents
-    toc <- scan(outfile,quiet=T,skip=16+numeqt+ndrug+2*nsub,n=21,comment.char="#")  
-  }
-  #get random parameter names
-  par <- scan(outfile,what="character",n=nvar,skip=toc[1],quiet=T)
-  #get fixed parameter names
-  parfix <- if(nofix>0) scan(outfile,what="character",skip=toc[2],n=nofix,quiet=T)
-  #get initial ranges for random parameters
-  ab <- matrix(scan(outfile,n=nvar*3,skip=toc[3],quiet=T,what="character"),nrow=nvar,ncol=3,byrow=T)
-  fixedpos <- which(ab[,3]=="NO")
-  if(length(fixedpos)==0) fixedpos <- NULL
-  ab <- matrix(as.numeric(ab[,1:2]),ncol=2)
-  #get values for fixed parameters
-  valfix <- if(nofix>0) scan(outfile,skip=toc[4],n=nofix,quiet=T)
-  #get the covariate names
-  covNameOffset <- switch(vernum,2,0,0)
-  if (ncov>0){
-    covnames <- scan(outfile,what="character",skip=toc[5],n=ncov+covNameOffset,quiet=T)
-  } else {covnames <- NA}
-  #get aic-bic
-  ic <- matrix(data=as.numeric(sub("D","E",scan(outfile,skip=toc[6],n=2,quiet=T,what=""))),nrow=1,ncol=2,byrow=T)
-  #get population predictions at observation times
-  temp1 <-as.numeric(sub("D","E",scan(outfile,skip=toc[7],n=numeqt*sum(nobs)*2,quiet=T,what="")))
-  
-  #get posterior predictions at observation times
-  temp2 <-as.numeric(sub("D","E",scan(outfile,skip=toc[8],n=numeqt*sum(nobs)*2,quiet=T,what="")))
-  
-  #flag negative pop or post preds
-  if (any(temp1<0,na.rm=T) | any(temp2<0,na.rm=T)){
-    #    temp1[temp1<0] <- 0
-    #    temp2[temp2<0] <- 0
-    negflag <- T
-  }
-  
-  ypredpop <- array(dim=c(nsub,numeqt,nobsmax,2))
-  ypredbay <- array(dim=c(nsub,numeqt,nobsmax,2))
-  count <- 1
-  cat("\nPopulation and posterior predictions at each subject's observation times.\n")
-  flush.console()
-  pb <- txtProgressBar(min = 1, max = nsub, style = 3)
-  for (jsub in 1:nsub){
-    setTxtProgressBar(pb,jsub)
-    for (ieq in 1:numeqt){
-      for (iobs in 1:nobs[jsub]){
-        for (icen in 1:2){
-          ypredpop[jsub,ieq,iobs,icen]<-temp1[count]
-          ypredbay[jsub,ieq,iobs,icen]<-temp2[count]
-          count <- count+1
+    toc <- scan(outfile,quiet=T,skip=16+numeqt+ndrug+2*nsub,n=21,comment.char="#") 
+    
+    #get random parameter names
+    par <- scan(outfile,what="character",n=nvar,skip=toc[1],quiet=T)
+    #get fixed parameter names
+    parfix <- if(nofix>0) scan(outfile,what="character",skip=toc[2],n=nofix,quiet=T)
+    #get initial ranges for random parameters
+    ab <- matrix(scan(outfile,n=nvar*3,skip=toc[3],quiet=T,what="character"),nrow=nvar,ncol=3,byrow=T)
+    fixedpos <- which(ab[,3]=="NO")
+    if(length(fixedpos)==0) fixedpos <- NULL
+    ab <- matrix(as.numeric(ab[,1:2]),ncol=2)
+    #get values for fixed parameters
+    valfix <- if(nofix>0) scan(outfile,skip=toc[4],n=nofix,quiet=T)
+    #get the covariate names
+    covNameOffset <- switch(vernum,2,0,0)
+    if (ncov>0){
+      covnames <- scan(outfile,what="character",skip=toc[5],n=ncov+covNameOffset,quiet=T)
+    } else {covnames <- NA}
+    #get aic-bic
+    ic <- matrix(data=as.numeric(sub("D","E",scan(outfile,skip=toc[6],n=2,quiet=T,what=""))),nrow=1,ncol=2,byrow=T)
+    #get population predictions at observation times
+    temp1 <-as.numeric(sub("D","E",scan(outfile,skip=toc[7],n=numeqt*sum(nobs)*2,quiet=T,what="")))
+    
+    #get posterior predictions at observation times
+    temp2 <-as.numeric(sub("D","E",scan(outfile,skip=toc[8],n=numeqt*sum(nobs)*2,quiet=T,what="")))
+    
+    #flag negative pop or post preds
+    if (any(temp1<0,na.rm=T) | any(temp2<0,na.rm=T)){
+      #    temp1[temp1<0] <- 0
+      #    temp2[temp2<0] <- 0
+      negflag <- T
+    }
+    
+    ypredpop <- array(dim=c(nsub,numeqt,nobsmax,2))
+    ypredbay <- array(dim=c(nsub,numeqt,nobsmax,2))
+    count <- 1
+    cat("\nPopulation and posterior predictions at each subject's observation times.\n")
+    flush.console()
+    pb <- txtProgressBar(min = 1, max = nsub, style = 3)
+    for (jsub in 1:nsub){
+      setTxtProgressBar(pb,jsub)
+      for (ieq in 1:numeqt){
+        for (iobs in 1:nobs[jsub]){
+          for (icen in 1:2){
+            ypredpop[jsub,ieq,iobs,icen]<-temp1[count]
+            ypredbay[jsub,ieq,iobs,icen]<-temp2[count]
+            count <- count+1
+          }
         }
       }
     }
-  }
-  count <- 1
-  #get MAP bayesian parameter estimate
-  temp <-as.numeric(sub("D","E",scan(outfile,skip=toc[9],n=nsub*2*nvar,quiet=T,what="")))
-  parbay <- array(dim=c(nsub,nvar,2))
-  count <- 1
-  cat("\nBayesian posterior parameters.\n")
-  flush.console()
-  pb <- txtProgressBar(min = 1, max = nsub, style = 3)
-  for (jsub in 1:nsub){
-    setTxtProgressBar(pb,jsub)
-    for (ivar in 1:nvar){
-      for (icen in 1:2){
-        parbay[jsub,ivar,icen]<-temp[count]
-        count <- count+1
-        
+    count <- 1
+    #get MAP bayesian parameter estimate
+    temp <-as.numeric(sub("D","E",scan(outfile,skip=toc[9],n=nsub*2*nvar,quiet=T,what="")))
+    parbay <- array(dim=c(nsub,nvar,2))
+    count <- 1
+    cat("\nBayesian posterior parameters.\n")
+    flush.console()
+    pb <- txtProgressBar(min = 1, max = nsub, style = 3)
+    for (jsub in 1:nsub){
+      setTxtProgressBar(pb,jsub)
+      for (ivar in 1:nvar){
+        for (icen in 1:2){
+          parbay[jsub,ivar,icen]<-temp[count]
+          count <- count+1
+          
+        }
       }
     }
-  }
-  count <- 1
-  
-  #CYCLE INFORMATION
-  cat("\nCycle information.\n")
-  flush.console()
-  if (icyctot > 0){
-    #get log-likelihoods
-    ilog <- as.numeric(sub("D","E",scan(outfile,skip=toc[10],n=icyctot,quiet=T,what="")))
-    #get means
-    imean <- matrix(data=as.numeric(sub("D","E",scan(outfile,skip=toc[11],n=icyctot*nvar,quiet=T,what=""))),nrow=icyctot,ncol=nvar,byrow=T)
-    dimnames(imean) <- list(cycle=1:icyctot,par=par)
-    #get medians
-    imed <- matrix(data=as.numeric(sub("D","E",scan(outfile,skip=toc[12],n=icyctot*nvar,quiet=T,what=""))),nrow=icyctot,ncol=nvar,byrow=T)
-    dimnames(imed) <- list(cycle=1:icyctot,par=par)
-    #get SDs
-    if(nsub>1) {
-      isd <- matrix(data=as.numeric(sub("D","E",scan(outfile,skip=toc[13],n=icyctot*nvar,quiet=T,what=""))),nrow=icyctot,ncol=nvar,byrow=T)
-    } else { isd <- matrix(NA,nrow=icyctot,ncol=nvar)}
-    dimnames(isd) <- list(cycle=1:icyctot,par=par)
-    #get CVs
-    if(nsub>1) {
-      icv <- matrix(data=as.numeric(sub("D","E",scan(outfile,skip=toc[14],n=icyctot*nvar,quiet=T,what=""))),nrow=icyctot,ncol=nvar,byrow=T)
-    } else { icv <- matrix(NA,nrow=icyctot,ncol=nvar)}
-    dimnames(icv) <- list(cycle=1:icyctot,par=par)
+    count <- 1
     
-    #get gamlam values
-    igamlam <- matrix(data=as.numeric(sub("D","E",scan(outfile,skip=toc[15],n=numeqt*icyctot,quiet=T,what=""))),ncol=numeqt,byrow=T)
+    #CYCLE INFORMATION
+    cat("\nCycle information.\n")
+    flush.console()
+    if (icyctot > 0){
+      #get log-likelihoods
+      ilog <- as.numeric(sub("D","E",scan(outfile,skip=toc[10],n=icyctot,quiet=T,what="")))
+      #get means
+      imean <- matrix(data=as.numeric(sub("D","E",scan(outfile,skip=toc[11],n=icyctot*nvar,quiet=T,what=""))),nrow=icyctot,ncol=nvar,byrow=T)
+      dimnames(imean) <- list(cycle=1:icyctot,par=par)
+      #get medians
+      imed <- matrix(data=as.numeric(sub("D","E",scan(outfile,skip=toc[12],n=icyctot*nvar,quiet=T,what=""))),nrow=icyctot,ncol=nvar,byrow=T)
+      dimnames(imed) <- list(cycle=1:icyctot,par=par)
+      #get SDs
+      if(nsub>1) {
+        isd <- matrix(data=as.numeric(sub("D","E",scan(outfile,skip=toc[13],n=icyctot*nvar,quiet=T,what=""))),nrow=icyctot,ncol=nvar,byrow=T)
+      } else { isd <- matrix(NA,nrow=icyctot,ncol=nvar)}
+      dimnames(isd) <- list(cycle=1:icyctot,par=par)
+      #get CVs
+      if(nsub>1) {
+        icv <- matrix(data=as.numeric(sub("D","E",scan(outfile,skip=toc[14],n=icyctot*nvar,quiet=T,what=""))),nrow=icyctot,ncol=nvar,byrow=T)
+      } else { icv <- matrix(NA,nrow=icyctot,ncol=nvar)}
+      dimnames(icv) <- list(cycle=1:icyctot,par=par)
+      
+      #get gamlam values
+      igamlam <- matrix(data=as.numeric(sub("D","E",scan(outfile,skip=toc[15],n=numeqt*icyctot,quiet=T,what=""))),ncol=numeqt,byrow=T)
+      
+      #calculate cycle aic and bic
+      if(all(diff(as.numeric(igamlam))==0)){q <- 0} else {q <- 1}
+      aic <- -2*ilog + (nvar^2 + 3*nvar)/2 + q
+      bic <- -2*ilog + 0.5*((nvar^2 + 3*nvar)/2 + q) * log(sum(nobs))
+      iic <- data.frame(cbind(aic,bic))
+      names(iic) <- c("AIC","BIC")
+      
+    } else {
+      ilog <- NA
+      iic <- NA
+      imean <- NA
+      isd <- NA
+      icv <- NA
+      igamlam <- NA
+    }
     
-    #calculate cycle aic and bic
-    if(all(diff(as.numeric(igamlam))==0)){q <- 0} else {q <- 1}
-    aic <- -2*ilog + (nvar^2 + 3*nvar)/2 + q
-    bic <- -2*ilog + 0.5*((nvar^2 + 3*nvar)/2 + q) * log(sum(nobs))
-    iic <- data.frame(cbind(aic,bic))
-    names(iic) <- c("AIC","BIC")
+    #LAST CYCLE
+    #get par values
+    lpar <- matrix(data=as.numeric(sub("D","E",scan(outfile,skip=toc[16],n=nsub*nvar,quiet=T,what=""))),nrow=nsub,ncol=nvar,byrow=T)
+    dimnames(lpar) <- list(nsub=1:nsub,par=par)
+    #get par SDs
+    lsd <- matrix(data=as.numeric(sub("D","E",scan(outfile,skip=toc[17],n=nsub*nvar,quiet=T,what=""))),nrow=nsub,ncol=nvar,byrow=T)
+    dimnames(lsd) <- list(nsub=1:nsub,par=par)
+    #get par CVs
+    lcv <- matrix(data=as.numeric(sub("D","E",scan(outfile,skip=toc[18],n=nsub*nvar,quiet=T,what=""))),nrow=nsub,ncol=nvar,byrow=T)
+    dimnames(lcv) <- list(nsub=1:nsub,par=par)
     
-  } else {
-    ilog <- NA
-    iic <- NA
-    imean <- NA
-    isd <- NA
-    icv <- NA
-    igamlam <- NA
-  }
-  
-  #LAST CYCLE
-  #get par values
-  lpar <- matrix(data=as.numeric(sub("D","E",scan(outfile,skip=toc[16],n=nsub*nvar,quiet=T,what=""))),nrow=nsub,ncol=nvar,byrow=T)
-  dimnames(lpar) <- list(nsub=1:nsub,par=par)
-  #get par SDs
-  lsd <- matrix(data=as.numeric(sub("D","E",scan(outfile,skip=toc[17],n=nsub*nvar,quiet=T,what=""))),nrow=nsub,ncol=nvar,byrow=T)
-  dimnames(lsd) <- list(nsub=1:nsub,par=par)
-  #get par CVs
-  lcv <- matrix(data=as.numeric(sub("D","E",scan(outfile,skip=toc[18],n=nsub*nvar,quiet=T,what=""))),nrow=nsub,ncol=nvar,byrow=T)
-  dimnames(lcv) <- list(nsub=1:nsub,par=par)
-  
-  #SUBJECT DATA
-  cat("\nSubject and covariate data.\n")
-  flush.console()
-  sdata <- matrix(scan(outfile,skip=toc[19],n=nsub*5,quiet=T,what="character"),nrow=nsub,ncol=5,byrow=T)
-  sdata <- data.frame(id=checkID(sdata[,2]),nsub=1:nsub,age=as.numeric(sdata[,3]),
-                      sex=sdata[,4],ht=as.numeric(sdata[,5]))
-  #dose covariates
-  doseCovOffset <- switch(vernum,3,1,1)
-  dosecov <- cbind(rep(1:nsub,ndose),matrix(as.numeric(sub("D","E",scan(outfile,skip=toc[20],n=sum(ndose)*(2*ndrug+doseCovOffset+ncov),quiet=T,what=""))),nrow=sum(ndose),byrow=T))
-  
-  #outputs
-  outputs <- switch(vernum,
-                    cbind(rep(1:nsub,nobs),matrix(as.numeric(sub("D","E",scan(outfile,skip=toc[21],n=sum(nobs)*(numeqt+1),quiet=T,what=""))),nrow=sum(nobs),byrow=T)),
-                    matrix(as.numeric(sub("D","E",scan(outfile,skip=toc[21],n=sum(nobs)*(numeqt)*8,quiet=T,what=""))),ncol=8,byrow=T),
-                    matrix(as.numeric(sub("D","E",scan(outfile,skip=toc[21],n=sum(nobs)*(numeqt)*8,quiet=T,what=""))),ncol=8,byrow=T))
-  outputs <- data.frame(outputs)
-  names(outputs) <- c("id","time","outeq","out","c0","c1","c2","c3")
-  
-  #data filename
-  mdata <- scan(outfile,skip=toc[21]+sum(nobs)*numeqt,quiet=T,what="character",n=1)
-  if(length(mdata)==0) mdata <- "NA"
-  
-  #summary
-  cat("Output file:",outfile,"\n")
-  cat("Random parameters:",par,"\n")
-  if(nofix==0){cat("There were no fixed parameters.\n")
-  } else {cat("Fixed parameters:",parfix,"\n")}
-  cat("Number of analyzed subjects:",nsub,"\n")
-  cat("Number of output equations:",numeqt,"\n")
-  cat("Additional covariates:",covnames,"\n")
-  if (negflag){ cat("WARNING: There were negative or non-real pop/post predictions.\n")}
-  coninterp <- switch(1+converge,"The run did not converge before the last cycle.","The run converged.","","WARNING: The run ended with a Hessian Error.")
-  cat(coninterp,"\n")
-  
-  if(vernum<3){
-    outlist <- list(nsub=nsub,nvar=nvar,nofix=nofix,par=par,parfix=parfix,covnames=covnames,ab=ab,valfix=valfix,
-                    icyctot=icyctot,numeqt=numeqt,ndrug=ndrug,ndose=ndose,ncov=ncov,
-                    nobs=nobs,nobsmax=nobsmax,ypredpop=ypredpop,
-                    ypredbay=ypredbay,parbay=parbay,ilog=ilog,iic=iic,
-                    imean=imean,imed=imed,isd=isd,icv=icv,igamlam=igamlam,lpar=lpar,lsd=lsd,lcv=lcv,
-                    sdata=sdata,dosecov=dosecov,outputs=outputs,negflag=negflag)
-  } else {
+    #SUBJECT DATA
+    cat("\nSubject and covariate data.\n")
+    flush.console()
+    sdata <- matrix(scan(outfile,skip=toc[19],n=nsub*5,quiet=T,what="character"),nrow=nsub,ncol=5,byrow=T)
+    sdata <- data.frame(id=checkID(sdata[,2]),nsub=1:nsub,age=as.numeric(sdata[,3]),
+                        sex=sdata[,4],ht=as.numeric(sdata[,5]))
+    #dose covariates
+    doseCovOffset <- switch(vernum,3,1,1)
+    dosecov <- cbind(rep(1:nsub,ndose),matrix(as.numeric(sub("D","E",scan(outfile,skip=toc[20],n=sum(ndose)*(2*ndrug+doseCovOffset+ncov),quiet=T,what=""))),nrow=sum(ndose),byrow=T))
+    
+    #outputs
+    outputs <- switch(vernum,
+                      cbind(rep(1:nsub,nobs),matrix(as.numeric(sub("D","E",scan(outfile,skip=toc[21],n=sum(nobs)*(numeqt+1),quiet=T,what=""))),nrow=sum(nobs),byrow=T)),
+                      matrix(as.numeric(sub("D","E",scan(outfile,skip=toc[21],n=sum(nobs)*(numeqt)*8,quiet=T,what=""))),ncol=8,byrow=T),
+                      matrix(as.numeric(sub("D","E",scan(outfile,skip=toc[21],n=sum(nobs)*(numeqt)*8,quiet=T,what=""))),ncol=8,byrow=T))
+    outputs <- data.frame(outputs)
+    names(outputs) <- c("id","time","outeq","out","c0","c1","c2","c3")
+    
+    #data filename
+    mdata <- scan(outfile,skip=toc[21]+sum(nobs)*numeqt,quiet=T,what="character",n=1)
+    if(length(mdata)==0) mdata <- "NA"
+    
+    #summary
+    cat("Output file:",outfile,"\n")
+    cat("Random parameters:",par,"\n")
+    if(nofix==0){cat("There were no fixed parameters.\n")
+    } else {cat("Fixed parameters:",parfix,"\n")}
+    cat("Number of analyzed subjects:",nsub,"\n")
+    cat("Number of output equations:",numeqt,"\n")
+    cat("Additional covariates:",covnames,"\n")
+    if (negflag){ cat("WARNING: There were negative or non-real pop/post predictions.\n")}
+    coninterp <- switch(1+converge,"The run did not converge before the last cycle.","The run converged.","","WARNING: The run ended with a Hessian Error.")
+    cat(coninterp,"\n")
+    
     outlist <- list(nsub=nsub,nvar=nvar,nofix=nofix,par=par,parfix=parfix,covnames=covnames,ab=ab,fixedpos=fixedpos,valfix=valfix,
                     icycmax=icycmax,icyctot=icyctot,stoptol=stoptol,converge=converge,ODEtol=ODEtol,numeqt=numeqt,ERRmod=ERRmod,
                     ndrug=ndrug,salt=salt,ndose=ndose,ncov=ncov,nobs=nobs,nobsmax=nobsmax,ypredpop=ypredpop,
@@ -312,6 +476,213 @@ ITparse <- function(outfile="IT_RF0001.TXT"){
                     imean=imean,imed=imed,isd=isd,icv=icv,igamlam=igamlam,lpar=lpar,lsd=lsd,lcv=lcv,
                     sdata=sdata,dosecov=dosecov,outputs=outputs,negflag=negflag,mdata=mdata)  
   }
+  
+  
+  if(vernum==4) {  #version 1.5
+    #number of subjects
+    nsub <- as.numeric(ITdims[1])
+    #number of random parameters
+    nvar <- as.numeric(ITdims[2])
+    #number of fixed parameters
+    nofix <- as.numeric(ITdims[3])
+    #number of random fixed parameters
+    nranfix <- as.numeric(ITdims[4])
+    #maximum cycles
+    icycmax <- as.numeric(ITdims[5])
+    #final cycle number
+    icyctot <- as.numeric(ITdims[6])
+    #stopping tolerance
+    stoptol <- as.numeric(ITdims[7])
+    #convergence
+    converge <- as.numeric(ITdims[8])
+    #ODE tolerance
+    ODEtol <- as.numeric(ITdims[9])
+    #number of output equations
+    numeqt <- ITdims[10]
+    #gammma estimated (0) or fixed (1) for each output equation
+    ERRmod <- scan(outfile,quiet=T,skip=13,n=1,comment.char="#")
+    #number of drugs
+    ndrug <- scan(outfile,quiet=T,skip=13+numeqt,n=1,comment.char="#")
+    #salt fraction for each drug
+    salt <- scan(outfile,quiet=T,skip=14+numeqt,n=ndrug,comment.char="#")
+    #number of dose events for each subjects
+    ndose <- scan(outfile,quiet=T,skip=14+numeqt+ndrug,n=nsub,comment.char="#")
+    #number of additional covariates
+    ncov <- scan(outfile,quiet=T,skip=14+numeqt+ndrug+nsub,n=1,comment.char="#")
+    #number of observations for each subject
+    nobs <- scan(outfile,quiet=T,skip=15+numeqt+ndrug+nsub,n=nsub,comment.char="#")
+    nobsmax <- max(nobs)
+    
+    #get table of contents
+    toc <- scan(outfile,quiet=T,skip=17+numeqt+ndrug+2*nsub,n=23,comment.char="#") 
+    #get random parameter names
+    par <- scan(outfile,what="character",n=nvar,skip=toc[1],quiet=T)
+    #get fixed parameter names
+    parfix <- if(nofix>0) scan(outfile,what="character",skip=toc[2],n=nofix,quiet=T)
+    #get fixed but randome parameter names
+    parranfix <- if(nranfix>0) scan(outfile,what="character",skip=toc[3],n=nranfix,quiet=T)
+    #get initial ranges for random parameters
+    ab <- matrix(scan(outfile,n=nvar*3,skip=toc[4],quiet=T,what="character"),nrow=nvar,ncol=3,byrow=T)
+    fixedpos <- which(ab[,3]=="NO")
+    if(length(fixedpos)==0) fixedpos <- NULL
+    ab <- matrix(as.numeric(ab[,1:2]),ncol=2)
+    #get values for fixed parameters
+    valfix <- if(nofix>0) scan(outfile,skip=toc[5],n=nofix,quiet=T)
+    #get values for random fixed parameters
+    valfix <- if(nranfix>0) scan(outfile,skip=toc[6],n=nranfix,quiet=T)
+    #get the covariate names
+    covNameOffset <- switch(vernum,2,0,0,0)
+    if (ncov>0){
+      covnames <- scan(outfile,what="character",skip=toc[7],n=ncov+covNameOffset,quiet=T)
+    } else {covnames <- NA}
+    #get aic-bic
+    ic <- matrix(data=as.numeric(sub("D","E",scan(outfile,skip=toc[8],n=2,quiet=T,what=""))),nrow=1,ncol=2,byrow=T)
+    #get population predictions at observation times
+    temp1 <-as.numeric(sub("D","E",scan(outfile,skip=toc[9],n=numeqt*sum(nobs)*2,quiet=T,what="")))
+    
+    #get posterior predictions at observation times
+    temp2 <-as.numeric(sub("D","E",scan(outfile,skip=toc[10],n=numeqt*sum(nobs)*2,quiet=T,what="")))
+    
+    #flag negative pop or post preds
+    if (any(temp1<0,na.rm=T) | any(temp2<0,na.rm=T)){
+      #    temp1[temp1<0] <- 0
+      #    temp2[temp2<0] <- 0
+      negflag <- T
+    }
+    
+    ypredpop <- array(dim=c(nsub,numeqt,nobsmax,2))
+    ypredbay <- array(dim=c(nsub,numeqt,nobsmax,2))
+    count <- 1
+    cat("\nPopulation and posterior predictions at each subject's observation times.\n")
+    flush.console()
+    pb <- txtProgressBar(min = 1, max = nsub, style = 3)
+    for (jsub in 1:nsub){
+      setTxtProgressBar(pb,jsub)
+      for (ieq in 1:numeqt){
+        for (iobs in 1:nobs[jsub]){
+          for (icen in 1:2){
+            ypredpop[jsub,ieq,iobs,icen]<-temp1[count]
+            ypredbay[jsub,ieq,iobs,icen]<-temp2[count]
+            count <- count+1
+          }
+        }
+      }
+    }
+    count <- 1
+    #get MAP bayesian parameter estimate
+    temp <-as.numeric(sub("D","E",scan(outfile,skip=toc[11],n=nsub*2*nvar,quiet=T,what="")))
+    parbay <- array(dim=c(nsub,nvar,2))
+    count <- 1
+    cat("\nBayesian posterior parameters.\n")
+    flush.console()
+    pb <- txtProgressBar(min = 1, max = nsub, style = 3)
+    for (jsub in 1:nsub){
+      setTxtProgressBar(pb,jsub)
+      for (ivar in 1:nvar){
+        for (icen in 1:2){
+          parbay[jsub,ivar,icen]<-temp[count]
+          count <- count+1
+          
+        }
+      }
+    }
+    count <- 1
+    
+    #CYCLE INFORMATION
+    cat("\nCycle information.\n")
+    flush.console()
+    if (icyctot > 0){
+      #get log-likelihoods
+      ilog <- as.numeric(sub("D","E",scan(outfile,skip=toc[12],n=icyctot,quiet=T,what="")))
+      #get means
+      imean <- matrix(data=as.numeric(sub("D","E",scan(outfile,skip=toc[13],n=icyctot*nvar,quiet=T,what=""))),nrow=icyctot,ncol=nvar,byrow=T)
+      dimnames(imean) <- list(cycle=1:icyctot,par=par)
+      #get medians
+      imed <- matrix(data=as.numeric(sub("D","E",scan(outfile,skip=toc[14],n=icyctot*nvar,quiet=T,what=""))),nrow=icyctot,ncol=nvar,byrow=T)
+      dimnames(imed) <- list(cycle=1:icyctot,par=par)
+      #get SDs
+      if(nsub>1) {
+        isd <- matrix(data=as.numeric(sub("D","E",scan(outfile,skip=toc[15],n=icyctot*nvar,quiet=T,what=""))),nrow=icyctot,ncol=nvar,byrow=T)
+      } else { isd <- matrix(NA,nrow=icyctot,ncol=nvar)}
+      dimnames(isd) <- list(cycle=1:icyctot,par=par)
+      #get CVs
+      if(nsub>1) {
+        icv <- matrix(data=as.numeric(sub("D","E",scan(outfile,skip=toc[16],n=icyctot*nvar,quiet=T,what=""))),nrow=icyctot,ncol=nvar,byrow=T)
+      } else { icv <- matrix(NA,nrow=icyctot,ncol=nvar)}
+      dimnames(icv) <- list(cycle=1:icyctot,par=par)
+      
+      #get gamlam values
+      igamlam <- matrix(data=as.numeric(sub("D","E",scan(outfile,skip=toc[17],n=numeqt*icyctot,quiet=T,what=""))),ncol=numeqt,byrow=T)
+      
+      #calculate cycle aic and bic
+      if(all(diff(as.numeric(igamlam))==0)){q <- 0} else {q <- 1}
+      aic <- -2*ilog + (nvar^2 + 3*nvar)/2 + q
+      bic <- -2*ilog + 0.5*((nvar^2 + 3*nvar)/2 + q) * log(sum(nobs))
+      iic <- data.frame(cbind(aic,bic))
+      names(iic) <- c("AIC","BIC")
+      
+    } else {
+      ilog <- NA
+      iic <- NA
+      imean <- NA
+      isd <- NA
+      icv <- NA
+      igamlam <- NA
+    }
+    
+    #LAST CYCLE
+    #get par values
+    lpar <- matrix(data=as.numeric(sub("D","E",scan(outfile,skip=toc[18],n=nsub*nvar,quiet=T,what=""))),nrow=nsub,ncol=nvar,byrow=T)
+    dimnames(lpar) <- list(nsub=1:nsub,par=par)
+    #get par SDs
+    lsd <- matrix(data=as.numeric(sub("D","E",scan(outfile,skip=toc[19],n=nsub*nvar,quiet=T,what=""))),nrow=nsub,ncol=nvar,byrow=T)
+    dimnames(lsd) <- list(nsub=1:nsub,par=par)
+    #get par CVs
+    lcv <- matrix(data=as.numeric(sub("D","E",scan(outfile,skip=toc[20],n=nsub*nvar,quiet=T,what=""))),nrow=nsub,ncol=nvar,byrow=T)
+    dimnames(lcv) <- list(nsub=1:nsub,par=par)
+    
+    #SUBJECT DATA
+    cat("\nSubject and covariate data.\n")
+    flush.console()
+    sdata <- matrix(scan(outfile,skip=toc[21],n=nsub*5,quiet=T,what="character"),nrow=nsub,ncol=5,byrow=T)
+    sdata <- data.frame(id=checkID(sdata[,2]),nsub=1:nsub,age=as.numeric(sdata[,3]),
+                        sex=sdata[,4],ht=as.numeric(sdata[,5]))
+    #dose covariates
+    doseCovOffset <- switch(vernum,3,1,1,1)
+    dosecov <- cbind(rep(1:nsub,ndose),matrix(as.numeric(sub("D","E",scan(outfile,skip=toc[22],n=sum(ndose)*(2*ndrug+doseCovOffset+ncov),quiet=T,what=""))),nrow=sum(ndose),byrow=T))
+    
+    #outputs
+    outputs <- matrix(as.numeric(sub("D","E",scan(outfile,skip=toc[23],n=sum(nobs)*(numeqt)*8,quiet=T,what=""))),ncol=8,byrow=T)
+    outputs <- data.frame(outputs)
+    names(outputs) <- c("id","time","outeq","out","c0","c1","c2","c3")
+    
+    #data filename
+    mdata <- scan(outfile,skip=toc[23]+sum(nobs)*numeqt,quiet=T,what="character",n=1)
+    if(length(mdata)==0) mdata <- "NA"
+    
+    #summary
+    cat("Output file:",outfile,"\n")
+    cat("Random parameters:",par,"\n")
+    if(nranfix==0){cat("There were no fixed but unknown parameters.\n")
+    } else {cat("Fixed unknown parameters:",parranfix,"\n")}
+    if(nofix==0){cat("There were no fixed parameters.\n")
+    } else {cat("Fixed parameters:",parfix,"\n")}
+    cat("Number of analyzed subjects:",nsub,"\n")
+    cat("Number of output equations:",numeqt,"\n")
+    cat("Additional covariates:",covnames,"\n")
+    if (negflag){ cat("WARNING: There were negative or non-real pop/post predictions.\n")}
+    coninterp <- switch(1+converge,"The run did not converge before the last cycle.","The run converged.","","WARNING: The run ended with a Hessian Error.")
+    cat(coninterp,"\n")
+    
+    outlist <- list(nsub=nsub,nvar=nvar,nranfix=nranfix,nofix=nofix,par=par,parranfix=parranfix,parfix=parfix,covnames=covnames,ab=ab,fixedpos=fixedpos,valfix=valfix,
+                    icycmax=icycmax,icyctot=icyctot,stoptol=stoptol,converge=converge,ODEtol=ODEtol,numeqt=numeqt,ERRmod=ERRmod,
+                    ndrug=ndrug,salt=salt,ndose=ndose,ncov=ncov,nobs=nobs,nobsmax=nobsmax,ypredpop=ypredpop,
+                    ypredbay=ypredbay,parbay=parbay,ilog=ilog,iic=iic,
+                    imean=imean,imed=imed,isd=isd,icv=icv,igamlam=igamlam,lpar=lpar,lsd=lsd,lcv=lcv,
+                    sdata=sdata,dosecov=dosecov,outputs=outputs,negflag=negflag,mdata=mdata)  
+  }
+  
+  
   class(outlist)="IT2B"
   return(outlist)
 }

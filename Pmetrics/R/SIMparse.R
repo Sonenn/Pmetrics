@@ -96,6 +96,7 @@ SIMparse <- function(file,include,exclude,combine=F,silent=F, parallel){
                       }))),
                       outeq=rep(1:nout,each=nsim*nobs))
     obs$out[obs$out==-99] <- NA
+
     
     #get simulated parameter values
     

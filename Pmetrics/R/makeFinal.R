@@ -116,11 +116,12 @@ makeFinal <- function(data){
     postVar <- data.frame(id=data$sdata$id,data$bsd^2)
     
     if(!all(is.na(postPoints))){
-      postCov <- array(NA,dim=c(data$nvar,data$nvar,data$nsub),
-                       dimnames=list(par1=data$par,par2=data$par,subj=unique(data$sd$id)))
-      postCor <- array(NA,dim=c(data$nvar,data$nvar,data$nsub),
-                       dimnames=list(par1=data$par,par2=data$par,subj=unique(data$sd$id)))
-      for(i in 1:data$nsub){
+      nsub <- min(data$nsub,100)
+      postCov <- array(NA,dim=c(data$nvar,data$nvar,nsub),
+                       dimnames=list(par1=data$par,par2=data$par,subj=unique(data$sd$id)[1:nsub]))
+      postCor <- array(NA,dim=c(data$nvar,data$nvar,nsub),
+                       dimnames=list(par1=data$par,par2=data$par,subj=unique(data$sd$id)[1:nsub]))
+      for(i in 1:nsub){
         temp2 <- postPoints[postPoints$id==data$sdata$id[i],]
         ret <- cov.wt(temp2[,3:(2+data$nvar)],wt=temp2$prob,cor=T,method="ML")
         postCov[,,i] <- ret$cov

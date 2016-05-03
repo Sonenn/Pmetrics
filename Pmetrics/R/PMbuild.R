@@ -32,7 +32,8 @@ PMbuild <- function(){
                     paste(Sys.getenv("APPDATA"),"\\Pmetrics\\compiledFortran",sep=""),
                     "~/.config/Pmetrics/compiledFortran")
   #remove old files if present
-  oldfiles <- Sys.glob(paste(destdir,"*.o",sep="/"))
+  oldfiles <- c(Sys.glob(paste(destdir,"*.o",sep="/")),Sys.glob(paste(destdir,"*.exe",sep="/")))
+
   if(length(oldfiles)>0) {file.remove(oldfiles)}
   #compile new files
   setwd(sourcedir)

@@ -477,9 +477,17 @@ SIMrun <- function(poppar,limits=NULL,model="model.txt",data="data.csv",split=F,
   } else {
     model <- trans$model
     nvar <- trans$nvar  #number of random parameters
-    nofix <- trans$nofix #number of fixed parameters
+    nofix <- trans$nofix #number of fixed constant parameters
+    if(length(trans$nranfix)>0){
+      nranfix <- trans$nranfix #number of fixed random parameters
+    } else {nranfix <- 0}
     valfix <- trans$valfix
     asserr <- trans$asserr
+    
+    #get final values of fixed but random parameters
+    if(nranfix>0){
+      valranfix <- poppar$popRanFix
+    } else {valranfix <- NULL}
     
     #grab limits from model file if they were not set to null
     if(!omitParLimits){
@@ -495,8 +503,17 @@ SIMrun <- function(poppar,limits=NULL,model="model.txt",data="data.csv",split=F,
     } else {limits <- parLimits}
     
     #parameter and covariate types
-    ptype <- ifelse(trans$ptype==1,"r","f")
+    ptype <- ifelse(trans$ptype==1,"r","f") #will be fixed for either fixed random or fixed constant
     ctype <- trans$ctype
+    if(ctype[1]==-99){ctype <- NULL}
+    
+    #make the correct string of values for fixed parameters
+    posranfix <- which(trans$ptype==2)
+    posfix <- which(trans$ptype==0)
+    allFix <- c(valfix,valranfix)
+    allFix <- allFix[!is.na(allFix)]
+    fixedVals <- allFix[rank(c(posfix,posranfix))]
+    
   }
   if(identical(modeltxt,model)) {
     modelfor <- T
@@ -620,8 +637,9 @@ SIMrun <- function(poppar,limits=NULL,model="model.txt",data="data.csv",split=F,
     #if nsim=0 then we will use each population point to simulate a single
     #output based on the template; otherwise, we will use the specified prior
     
+    
     if(nsim==0 & inherits(poppar,"NPAG")){
-      if(!missing(covariate)){ #can't simulate from each point with covariate sim
+      if(simWithCov){ #can't simulate from each point with covariate sim
         endNicely(paste("You cannot simulate each point with simulated covariates.\n"),model,data)
       }
       popPoints <- poppar$popPoints
@@ -633,8 +651,7 @@ SIMrun <- function(poppar,limits=NULL,model="model.txt",data="data.csv",split=F,
       #gridpts:                       values of gridpoints
       gridpts <- c(t(popPoints[,1:nvar]))
       priorSource <- c(2,2,1,nrow(popPoints),gridpts)
-      nsim <- 1 #change to avoid error, but it will be ignored
-      
+
       #make some confirmation answers
       #rep(1,2):                            #confirm one point per sim
       #confirm gridpoints 
@@ -664,12 +681,11 @@ SIMrun <- function(poppar,limits=NULL,model="model.txt",data="data.csv",split=F,
       #rep("1",2):                     #distribution info is correct
       #restrictions on parameters are correct
       confirm <- c("0",rep("go",ndist),rep("1",2))
-      
-      #double check nsim isn't 0
-      if(nsim==0) nsim <- 1
+
       
     } #end of block to make distribution when nsim>0
     
+
     #apply limits as necessary
     #this will result in string with "f" or "r,1" or "r,0,a,b" for fixed, random no limits,
     #or random with limits a and b, respectively
@@ -684,6 +700,10 @@ SIMrun <- function(poppar,limits=NULL,model="model.txt",data="data.csv",split=F,
     return(list(varVec=varVec,priorSource=priorSource,confirm=confirm))
     
   } #end getSimPrior function
+  
+  
+  #if nsim==0, change to 1, but will be ignored
+  if(nsim==0) {nsimtxt <- 1} else {nsimtxt <- nsim}
   
   #other simulation arguments
   if (missing(outname)){outname <- "simout"}
@@ -784,11 +804,11 @@ SIMrun <- function(poppar,limits=NULL,model="model.txt",data="data.csv",split=F,
                            model,                          #name of model file
                            thisPrior$varVec,               #random parameters and limits if they exist
                            "1",                            #input from .csv file
-                           "ZMQtemp.csv",                     #name of .csv file
-                           ctype,                  #piecewise covariates
+                           "ZMQtemp.csv",                  #name of .csv file
+                           ctype,                          #piecewise covariates
                            "go",
-                           nsim,                           #number of simulations/subject
-                           valfix,                         #value of any fixed parameters
+                           nsimtxt,                        #number of simulations/subject
+                           fixedVals,                      #value of any fixed parameters
                            ode,                            #ode tolerance
                            obsNoise,                       #observation noise
                            "1",                            #skip explanation of noisy values
@@ -833,12 +853,40 @@ SIMrun <- function(poppar,limits=NULL,model="model.txt",data="data.csv",split=F,
     temp <- PMreadMatrix("abcde1.csv",quiet=T)
     simnum <- unlist(lapply(temp$id,function(x) substr(gsub("[[:space:]]","",x),9-trunc,8)))
     temp$id <- paste(include[1],simnum,sep="_")
+    #add back simulated covariates if done, but keep non-simulated ones
+    if(simWithCov){
+      getBackCov <- function(temp,n){
+        parValues <- SIMparse(paste(outname,n,".txt",sep=""),silent=T)$parValues
+        covOrig <- names(CVsum)[3:(ncol(CVsum)-npar)] 
+        covSim <- names(parValues)[names(parValues) %in% covOrig]
+        covSimPos <- which(covOrig %in% covSim)
+        covNotSimPos <- which(!covOrig %in% covSim)
+        if(length(covSimPos)>0){
+          nfixed <- get(x="nfixed",envir=PMenv)
+          covDF <- cbind(parValues[,1+npar+covSimPos])
+          if(length(covNotSimPos)>0){
+            covDF <- cbind(covDF,temp[,nfixed+covNotSimPos])
+          }
+          covDF <- covDF[,rank(c(covSimPos,covNotSimPos))]
+        }
+        temp[,(nfixed+1):(nfixed+ncol(covDF))] <- NA
+        temp[!duplicated(temp$id),(nfixed+1):(nfixed+ncol(covDF))] <- covDF
+        names(temp)[(nfixed+1):(nfixed+ncol(covDF))] <- covOrig
+        return(temp)
+      }
+      temp <- getBackCov(temp,1)
+      
+    }
+    
     if(any(unlist(lapply(as.character(unique(temp$id)),function(x) nchar(x)>11)))) stop("Shorten all template id values to 6 characters or fewer.\n")
     if(nsub>1){
       for(j in 2:nsub){
         curTemp <- PMreadMatrix(paste("abcde",j,".csv",sep=""),quiet=T)   
         simnum <- unlist(lapply(curTemp$id,function(x) substr(gsub("[[:space:]]","",x),9-trunc,8)))
         curTemp$id <- paste(include[j],simnum,sep="_")
+        if(simWithCov){
+          curTemp <- getBackCov(curTemp,j)
+        }
         if(any(unlist(lapply(as.character(unique(curTemp$id)),function(x) nchar(x)>11)))) stop("Shorten all template id values to 6 characters or fewer.\n")
         temp <- rbind(temp,curTemp)
       }

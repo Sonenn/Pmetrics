@@ -12,10 +12,12 @@
 <li>makePTA with target.type = 'time' now MUCH faster thanks to improvements by Jan Strojil</li>
 <li>Added the ability to makePTA to recalculate success threshold and redefine labels using existing PMpta object</li>
 </ul>
+</ul>
 <h3>BUG FIXES</h3>
 <ul>
 <li>The mult argument works properly in plot.PMsim now.</li>
 <li>Fixed bug in makePTA and simulated targets that miscalculated success</li>
+<li>Fixed bug in makeNPDE that caused a crash when model and data files have same basename.</li>
 </ul>
 </ul>
 </ul>
@@ -24,6 +26,7 @@
 <ul>
 <li>Added a check to PMcheck for subjects with no observations</li>
 <li>Added binSize argument to plot.PMsim to bin simulated concentrations, which is useful for VPCs.</li>
+</ul>
 </ul>
 <h3>BUG FIXES</h3>
 <ul>

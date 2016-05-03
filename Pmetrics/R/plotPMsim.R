@@ -135,11 +135,11 @@ plot.PMsim <- function(x,mult=1,log=T,probs=c(0.05,0.25,0.5,0.75,0.95),binSize=0
   
   simout$obs$out <- simout$obs$out * mult
   obs$obs <- obs$obs * mult
-  
-  sim.out <- simout$obs
+
+  sim.out <- simout$obs[!is.na(simout$obs$out),]
   #bin times if requested
   if(binSize > 0){
-    binnedTimes <- seq(floor(min(sim.out$time)),ceiling(max(sim.out$time)),binSize)
+    binnedTimes <- seq(floor(min(sim.out$time,na.rm=T)),ceiling(max(sim.out$time,na.rm=T)),binSize)
     sim.out$time <- binnedTimes[.bincode(sim.out$time,binnedTimes)]
   }
   
@@ -249,16 +249,22 @@ plot.PMsim <- function(x,mult=1,log=T,probs=c(0.05,0.25,0.5,0.75,0.95),binSize=0
       npc <- data.frame(quantile=probs,prop.less=rep(NA,length(probs)),pval=rep(NA,length(probs)))
       for (i in 1:nrow(npc)){
         success <- not.miss-sum(obs$sim.quant>=probs[i],na.rm=T)
+        success90 <- not.miss-sum(obs$sim.quant>=0.05 & obs$sim.quant<=0.95,na.rm=T)
+        
         pval <- binom.test(success,not.miss,probs[i])$p.value
         npc$prop.less[i] <- round(success/not.miss,3)
         npc$pval[i] <- pval
+        attr(npc,"05-95") <- 1 - success90/not.miss
+        attr(npc,"P-90") <- binom.test(success90,not.miss,0.1)$p.value
       }
       if (not.miss<nrow(obs)){cat(paste("\n",nrow(obs)-not.miss," observed values were obtained beyond the \nsimulated time range of ",min(sim.sum$time)," to ",max(sim.sum$time)," and were excluded.",sep=""))}
       
       #close device if necessary
       if(inherits(out,"list")) dev.off()
       
-      return(list(npc=npc,simsum=sim.sum,obs=obs))
+      retVal <- list(npc=npc,simsum=sim.sum,obs=obs)
+      class(retVal) <- c("PMnpc","list")
+      return(retVal)
       
     } else {
       #close device if necessary

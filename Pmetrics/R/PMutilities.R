@@ -24,7 +24,7 @@ logAxis <- function(side,grid=F,...){
 #make a density file stub for bootstrapping and priors
 makeDen <- function(NPdata,bootstrap=F){
   f <- file("prior.txt","w")
-  writeLines("DENSITY APR_10 ... Made by npageng18",f)
+  writeLines("DENSITY OCT_15 ... Made by npagranfix6",f)
   if(is.null(NPdata$ndim)) {
     if(bootstrap>1) return(invisible(-1))
     cat("\nYour NPdata prior object is older and does not contain the number of dimensions in your model.\n")
@@ -47,8 +47,20 @@ makeDen <- function(NPdata,bootstrap=F){
   writeLines(NPdata$par,f)
   write(NPdata$nofix,f)
   write(NPdata$parfix,f)
+  if(length(NPdata$nranfix)>0){
+    write(NPdata$nranfix,f)
+    write(NPdata$parranfix,f)
+  } else {
+    write("0",f)
+    write("",f)
+  }
   write.table(NPdata$ab,f,row.names=F,col.names=F)
   write(NPdata$valfix,f)
+  if(length(NPdata$nranfix)>0){
+    write(NPdata$valranfix,f)
+  } else {
+    write("",f)
+  }
   writeLines("100",f)
   write(NPdata$icycst + NPdata$icyctot - 1,f)
   writeLines("0",f)
@@ -379,7 +391,7 @@ makeModel <- function(model="model.txt",data="data.csv",engine,write=T,silent=F)
   nofix <- length(fixcon)
   if(nofix>0) blocks$primVar <- gsub("!","",blocks$primVar)
   
-
+  
   #get limits [a,b] on primary variables
   splitprimVar <- strsplit(blocks$primVar,sep)
   a <- as.numeric(unlist(lapply(splitprimVar,function(x) x[2])))
@@ -390,11 +402,11 @@ makeModel <- function(model="model.txt",data="data.csv",engine,write=T,silent=F)
   #if any fixed constant variables are present, set ptype to 0
   if(nofix>0) ptype[fixcon] <- 0
   
-  #for now, make all fixed constants for IT2B and SIM
-  if(engine$alg=="IT" | engine$alg=="SIM"){
-    ptype[ptype==2] <- 0
-    nofix <- sum(as.numeric(is.na(b)))
-  }
+  # #for now, make all fixed constants for IT2B and SIM
+  # if(engine$alg=="IT" | engine$alg=="SIM"){
+  #   ptype[ptype==2] <- 0
+  #   nofix <- sum(as.numeric(is.na(b)))
+  # }
   
   #npvar is total number of parameters
   #nvar is number of random (estimated) parameters
@@ -402,7 +414,7 @@ makeModel <- function(model="model.txt",data="data.csv",engine,write=T,silent=F)
   #nofix is number of constant parameters
   nranfix <- sum(as.numeric(is.na(b)))-nofix
   nvar <- npvar - nofix - nranfix
-
+  
   if((engine$alg=="IT" | engine$alg=="ERR") & length(fixedpos)>0) ptype[fixedpos] <- -1
   
   if(nofix>0){
@@ -478,12 +490,12 @@ makeModel <- function(model="model.txt",data="data.csv",engine,write=T,silent=F)
   #secondary variable definitions
   svardef <- blocks$secVar  
   
-  #get secondary variables and remove continuation lines beginning with "+"
+  #get secondary variables and remove continuation lines beginning with "&"
   secVarNames <- gsub("[[:blank:]]","",unlist(lapply(strsplit(svardef,"="),function(x) x[1])))
   secVarNames[is.na(secVarNames)] <- ""
   oldContLines <- grep("^\\+",secVarNames)
   if(length(oldContLines>0)){
-    return(list(status=-1,msg="\nPlease replace '+' with '&' in all continuation lines.\n"))
+    return(list(status=-1,msg="\nThe model file format has changed.  Please replace '+' with '&' in all continuation lines.\n"))
   }
   contLines <- grep("^&",secVarNames)
   
@@ -547,7 +559,7 @@ makeModel <- function(model="model.txt",data="data.csv",engine,write=T,silent=F)
   #remove leading ampersands from getfa, getix, gettlag if present
   oldContLines <- grep("^\\+",c(blocks$f,blocks$ini,blocks$lag))
   if(length(oldContLines>0)){
-    return(list(status=-1,msg="\nPlease replace '+' with '&' in all continuation lines.\n"))
+    return(list(status=-1,msg="\nThe model file format has changed.  Please replace '+' with '&' in all continuation lines.\n"))
   }
   if(length(grep("^&",blocks$f)>0)) blocks$f <- gsub("^&","",blocks$f)
   if(length(grep("^&",blocks$ini)>0)) blocks$ini <- gsub("^&","",blocks$ini)
@@ -1279,7 +1291,7 @@ makeModel <- function(model="model.txt",data="data.csv",engine,write=T,silent=F)
     cat("\n\n")
     
   } #end if silent
-  return(list(status=1,modelFor=modelFor,N=N,ptype=ptype,ctype=ctype,nvar=nvar,nofix=nofix,valfix=valfix,ab=ab.df,indpts=indpts,asserr=asserr,blocks=blocks))
+  return(list(status=1,modelFor=modelFor,N=N,ptype=ptype,ctype=ctype,nvar=nvar,nofix=nofix,nranfix=nranfix,valfix=valfix,ab=ab.df,indpts=indpts,asserr=asserr,blocks=blocks))
 } #end makeModel function
 
 
@@ -1316,8 +1328,8 @@ var.wt <- function(x, w, na.rm = FALSE) {
 weighted.t.test <- function(x, w, mu, conf.level = 0.95, alternative="two.sided", na.rm=TRUE) {
   
   if(!missing(conf.level) &
-       (length(conf.level) != 1 || !is.finite(conf.level) ||
-          conf.level < 0 || conf.level > 1))
+     (length(conf.level) != 1 || !is.finite(conf.level) ||
+      conf.level < 0 || conf.level > 1))
     stop("'conf.level' must be a single number between 0 and 1")
   # see if x is PMop$pop or PMop$post object
   if(identical(inherits(x,c("PMop","data.frame"),which=T),as.integer(c(1,2)))){

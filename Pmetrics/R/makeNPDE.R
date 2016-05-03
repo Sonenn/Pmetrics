@@ -60,6 +60,7 @@ makeNPDE <- function(run,data,outeq,nsim=1000,...){
         modelfile <- instrfile[5]
         #convert to original name    
         modelfile <- basename(Sys.glob(paste(run,"/inputs/",strsplit(modelfile,"\\.")[[1]][1],"*",sep="")))
+        if(length(modelfile)>1){modelfile <- modelfile[grep(".txt",modelfile)]}
         
       } else {stop("Model file not found.\n")}
     }
@@ -126,9 +127,12 @@ makeNPDE <- function(run,data,outeq,nsim=1000,...){
   obs <- obs[,c("id","time","out","outeq")]
   #remove missing obs
   obs <- obs[obs$out!=-99,]
+
   
+  if(inherits(simdata,"PMsim")){ #only one simulated subject
+    simobs <- simdata$obs
+  } else {simobs <- lapply(simdata,function(x) x$obs)} #multiple simulated subjects
   
-  simobs <- lapply(simdata,function(x) x$obs)
   simobs <- lapply(1:nsub,function(x) {
     simobs[[x]]$id <- unique(data$id)[x];
     simobs[[x]]$nsub <- x;
